@@ -57,9 +57,9 @@ describe('generated questions are validated before they are shown', () => {
 
   it('rejects a question that asks the candidate about an internal state', () => {
     expect(rejectionReason('How confident did you feel about that decision?')).toMatch(
-      /^affect_vocabulary:/,
+      /^banned_vocabulary:/,
     );
-    expect(rejectionReason('Describe your mood during that outage.')).toMatch(/^affect_vocabulary:/);
+    expect(rejectionReason('Describe your mood during that outage.')).toMatch(/^banned_vocabulary:/);
   });
 
   it('still allows a statistical confidence interval in a question', () => {
@@ -127,7 +127,7 @@ describe('catalog fallback (acceptance criterion 2)', () => {
       OPTIONS,
     );
     expect(result.source).toBe('catalog_fallback');
-    expect(result.fallbackReason).toBe('affect_vocabulary:enthusiastic');
+    expect(result.fallbackReason).toBe('banned_vocabulary:enthusiastic');
   });
 
   it('falls back when no generator is configured at all', async () => {

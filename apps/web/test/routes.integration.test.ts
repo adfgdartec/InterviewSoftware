@@ -79,7 +79,11 @@ afterAll(async () => {
   await sql.end({ timeout: 5 });
 });
 
-function deps(userId = FIXTURE.userA, orgId = FIXTURE.orgA, overrides: Partial<RouteDeps> = {}): RouteDeps {
+function deps(
+  userId: string = FIXTURE.userA,
+  orgId: string = FIXTURE.orgA,
+  overrides: Partial<RouteDeps> = {},
+): RouteDeps {
   return {
     authenticate: async () => ({ userId, orgId }),
     entitlements: postgresEntitlementStore(sql, userId),

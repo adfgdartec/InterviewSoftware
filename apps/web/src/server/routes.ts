@@ -1,7 +1,8 @@
 import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import { LEVEL_BANDS } from '@loopcraft/core';
-import { appClient, asUser } from '@loopcraft/db';
+import { asUser } from '@loopcraft/db';
+import type { Sql } from '@loopcraft/db';
 import { guard, toErrorResponse, type GuardPorts } from './guards.js';
 import { assertFeature, assertSessionQuota } from './entitlements.js';
 import {
@@ -33,7 +34,7 @@ export interface RouteDeps extends GuardPorts {
   readonly templates: { byId(id: string): LoopTemplate | undefined };
   readonly items: ItemSource;
   readonly generator: QuestionGenerator | null;
-  readonly sql: ReturnType<typeof appClient>;
+  readonly sql: Sql;
   readonly turnsPerRound: number;
   readonly costCeilingCents: number;
   readonly generationTimeoutMs: number;

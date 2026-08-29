@@ -58,7 +58,7 @@ export function rejectionReason(text: string): string | null {
   if (trimmed.length < MIN_QUESTION_LENGTH) return 'too_short';
   if (trimmed.length > MAX_QUESTION_LENGTH) return 'too_long';
   const banned = findBannedTokensInText(trimmed);
-  if (banned.length > 0) return `affect_vocabulary:${banned[0]?.token ?? 'unknown'}`;
+  if (banned.length > 0) return `banned_vocabulary:${banned[0]?.token ?? 'unknown'}`;
   // Spec §5.3: never present an item as a real or insider question from a named employer.
   if (/\b(real|actual|insider|leaked)\b[^.?!]{0,40}\bquestions?\b/i.test(trimmed)) {
     return 'provenance_claim';
