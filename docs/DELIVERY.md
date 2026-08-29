@@ -1,16 +1,16 @@
 # Loopcraft — delivery report
 
-Build date 2026-08-29 · 24 commits · 12,645 lines of TypeScript, Python and SQL
+Build date 2026-08-29 · 26 commits · 12,800 lines of TypeScript, Python and SQL
 Source of truth: [`docs/spec.md`](./spec.md) · Prototype defects avoided: [`docs/legacy-audit.md`](./legacy-audit.md)
 
 ## 1. Status against the spec's build phases
 
 | Phase | Scope | Exit criteria | Status |
 | --- | --- | --- | --- |
-| 0 | Monorepo, CI, schema, RLS, auth, entitlements, provider registry, brand | `pnpm test` green; RLS cross-tenant test passes; no secrets client-side | **Complete** (RLS suite needs re-run, §3.1) |
-| 1 | Durable sessions, catalog, item bank, question generation with fallback, text-only loop | Full loop completes and resumes after refresh; contract tests pass for every track | **Complete** (loop suites need re-run, §3.1) |
+| 0 | Monorepo, CI, schema, RLS, auth, entitlements, provider registry, brand | `pnpm test` green; RLS cross-tenant test passes; no secrets client-side | **Complete, verified** |
+| 1 | Durable sessions, catalog, item bank, question generation with fallback, text-only loop | Full loop completes and resumes after refresh; contract tests pass for every track | **Complete, verified** |
 | 2 | Audio, ASR, delivery metrics, anchored grading n=3, debrief packet | Grader α vs gold set reported; no banned field names in any schema | **Partial** — grading and debrief wired end to end; second criterion met. First **not met**: no gold set, so no α. Audio/ASR not wired. |
-| 3 | Coding round: sandboxed execution, hint ladder, interviewer interrupts | Sandbox escape suite passes; hint-dependence scored | **Built; escape suite unverified** (§3.1) |
+| 3 | Coding round: sandboxed execution, hint ladder, interviewer interrupts | Sandbox escape suite passes; hint-dependence scored | **Complete, verified** |
 | 4 | System design canvas, diagram extraction, design rubric | Design round graded end to end | **Complete** |
 | 5 | IRT adaptivity, ability estimates, weakness graph, FSRS scheduler | θ and SE surfaced with uncertainty in UI | **Complete** |
 | 6 | Billing, entitlements, ARL checkout and cancellation, cost ceilings | Economics CI check passes; cancel flow ≤ signup clicks | **Cancel-flow criterion met.** Margin gate implemented and correctly **failing**, because rates are unset (§7). |
@@ -38,47 +38,68 @@ tooling/
 templates · **124 provenance-tagged items**. **Database:** 27 tables, 28 RLS policies, RLS
 enabled *and forced* everywhere.
 
-## 3. Test results
+## 3. Test results — actual output
 
-### 3.1 Verified in this session — actual output
+Loopcraft uses **no Docker**. Postgres is a native cluster; the code sandbox is macOS
+Seatbelt. Every suite below was executed.
 
 ```
-$ pnpm exec eslint .                    (clean)
+$ pnpm exec eslint .                    clean
 $ pnpm run typecheck                    Tasks: 8 successful, 8 total
+$ pnpm run test                         Tasks: 9 successful, 9 total
 
-@loopcraft/core                Tests  109 passed
-@loopcraft/scoring             Tests  132 passed
-@loopcraft/design              Tests   42 passed
-@loopcraft/billing             Tests   29 passed
-@loopcraft/providers           Tests   22 passed
-@loopcraft/web  (a11y)         Tests   23 passed
-eslint-plugin-loopcraft        Tests   17 passed
-@loopcraft/sandbox (non-container)  Tests  30 passed
+@loopcraft/core                Tests  109 passed (109)
+@loopcraft/scoring             Tests  132 passed (132)
+@loopcraft/web                 Tests  125 passed (125)
+@loopcraft/sandbox             Tests   53 passed  (53)
+@loopcraft/design              Tests   42 passed  (42)
+@loopcraft/billing             Tests   29 passed  (29)
+@loopcraft/web (a11y)          Tests   23 passed  (23)
+@loopcraft/providers           Tests   22 passed  (22)
+@loopcraft/db                  Tests   18 passed  (18)
+eslint-plugin-loopcraft        Tests   17 passed  (17)
 
-$ cd apps/worker && pytest -q            46 passed in 0.35s
+$ cd apps/worker && pytest -q            46 passed
 ```
 
-**450 tests verified** (404 TypeScript + 46 Python). Zero uses of `any` across `packages/*`.
+**616 tests, 0 failures, 0 unrun** (570 TypeScript + 46 Python). Zero `any` across
+`packages/*`.
 
-### 3.2 Written but NOT verified — 169 tests, blocked on infrastructure
+### 3.1 Running processes
 
-The host disk filled to 100% during this session and the Docker daemon has not recovered, so
-three suites could not be run. They are not skipped or weakened — they simply have not been
-executed since the environment broke.
+| Process | Port | Check |
+| --- | --- | --- |
+| Next.js web | 3100 | `/`, `/dashboard`, `/calibration`, `/compliance` all HTTP 200 |
+| FastAPI worker | 8099 | `GET /health` → `{"status":"ok"}`; `POST /v1/delivery-metrics` returns the nine §2.7 measurements |
+| Postgres 16.15 | 54329 | `pg_isready` accepting connections |
 
-| Suite | Tests | Needs | Last known state |
-| --- | --- | --- | --- |
-| `packages/db` (RLS) | 18 | Postgres | 18/18 green earlier this session |
-| `apps/web` db-backed | 125 | Postgres | 125/125 green earlier this session |
-| `packages/sandbox` escape | 26 | Docker | 21/26; the 5 failures were a real cold-start bug, since fixed but **not re-run** |
+### 3.2 How the sandbox is enforced without a container
 
-**Nothing in §3.1 depends on those three.** To restore: free disk, start Docker, then
-`docker compose up -d postgres && pnpm --filter @loopcraft/db migrate && pnpm run test`.
+Each control names the mechanism that actually enforces it, because they are not equally
+strong and a sandbox gets over-trusted otherwise.
+
+| Control | Mechanism | Strength |
+| --- | --- | --- |
+| Network | Seatbelt `(deny network*)` | Hard denial at the syscall boundary |
+| Filesystem | Seatbelt `(deny default)` | Read-only except one per-run scratch subpath |
+| CPU time | `RLIMIT_CPU` | Kernel-enforced, SIGXCPU |
+| Processes | `RLIMIT_NPROC` | Kernel-enforced, `fork` fails |
+| Wall clock | in-process SIGALRM, then `killpg` | Process-group kill, so forks cannot outlive it |
+| **Memory** | in-process guard + parent RSS poll | **Not a kernel cap** — see below |
+
+macOS rejects `RLIMIT_AS` and `RLIMIT_DATA` outright. A parent-side RSS poll every 100ms let
+a tight allocation loop reach **468 MB against a 256 MB ceiling**. An in-process guard
+sampling `getrusage` every 10ms now catches it at **173 MB**, under the ceiling, with the
+parent poll as backstop. This is a real ceiling but a sampled one; it is not equivalent to a
+container's `--memory`.
+
+The escape suite is also 3–10× faster than the container version — 50–200 ms per case versus
+600–900 ms — because there is no image cold start.
 
 ### 3.3 Accessibility — what the green result does and does not mean
 
-axe-core reports **zero critical or serious violations** on all four primary routes. Two
-limits are asserted by the suite itself so the result is not over-read:
+axe-core reports **zero critical or serious violations** on all four routes. Two limits are
+asserted by the suite itself so the result is not over-read:
 
 1. jsdom has no canvas, so axe files **colour-contrast as `incomplete`**, not as a pass.
    Contrast is unverified and must be checked in a real browser.
@@ -89,18 +110,18 @@ limits are asserted by the suite itself so the result is not over-read:
 
 | # | Criterion | State |
 | --- | --- | --- |
-| 1 | Resume mid-round with state intact | Met; suite needs re-run (§3.1) |
-| 2 | Every track yields all five item types; fallback works | Met — 48 contract tests |
-| 3 | Track and level propagate to the saved record | Met; suite needs re-run |
-| 4 | No schema infers emotion; a lint rule enforces it | Met — and the rule was **widened** this session to cover JSX text (§4) |
-| 5 | No key, path, payload or public URL reachable from client | Met — 5 scans over every tracked file |
-| 6 | Org A cannot read org B | Met; suite needs re-run |
+| 1 | Resume mid-round with state intact | **Met** — proven by discarding every pooled connection |
+| 2 | Every track yields all five item types; fallback works | **Met** — 48 contract tests |
+| 3 | Track and level propagate to the saved record | **Met** |
+| 4 | No schema infers emotion; a lint rule enforces it | **Met** — rule widened to cover JSX text (§4) |
+| 5 | No key, path, payload or public URL reachable from client | **Met** — 5 scans over every tracked file |
+| 6 | Org A cannot read org B | **Met** — 18 denial tests on native Postgres |
 | 7 | Grading reliability measured and gated | **Not met** — no gold set exists |
-| 8 | Every score carries an uncertainty interval | Met end to end, structurally (§4) |
-| 9 | Paid actions authorized server-side | Met; suite needs re-run |
+| 8 | Every score carries an uncertainty interval | **Met** end to end, structurally |
+| 9 | Paid actions authorized server-side | **Met** |
 | 10 | Account deletion purges rows and storage | **Not met** — `retention_jobs` exists, the job does not |
-| 11 | axe zero critical on every primary route | Met, with §3.3 limits |
-| 12 | `claims-policy.md` exists and strings are checked | Met — the gate parses the policy document itself |
+| 11 | axe zero critical on every primary route | **Met**, with §3.3 limits |
+| 12 | `claims-policy.md` exists and strings are checked | **Met** — the gate parses the policy document itself |
 
 ## 4. Architecture decisions and why
 
@@ -152,19 +173,29 @@ plausible rates, $49 for 8 included sessions clears only ~67% margin against a 7
 
 ## 5. Setup
 
+No Docker required.
+
 ```bash
+brew install postgresql@16          # once
 nvm use && pnpm install
-docker compose up -d postgres
+
+pnpm run db:init && pnpm run db:start
 pnpm --filter @loopcraft/db migrate
-docker pull python:3.12-alpine          # sandbox base image
 
 /opt/homebrew/bin/python3.12 -m venv apps/worker/.venv
 apps/worker/.venv/bin/pip install -e 'apps/worker[dev]'
 
+# Gates
 pnpm exec eslint . && pnpm run typecheck && pnpm run test
-pnpm --filter @loopcraft/web test:a11y
 cd apps/worker && .venv/bin/python -m pytest -q
+
+# Processes
+pnpm run dev:web       # http://localhost:3100
+pnpm run dev:worker    # http://localhost:8099
 ```
+
+The sandbox needs `/usr/bin/sandbox-exec` (macOS, present by default) and
+`/opt/homebrew/bin/python3.12`. Its suite fails rather than skips when either is missing.
 
 No provider keys are needed: every test mocks its providers and demo mode is deterministic.
 
@@ -180,11 +211,10 @@ No provider keys are needed: every test mocks its providers and demo mode is det
 3. **No ASR ingestion or audio capture.** The worker computes the §2.7 metrics from a
    transcript and timings, but nothing feeds it from a session.
 
-**Verification debt (see §3.2)**
+**Verification debt**
 
-4. Three suites (169 tests) need Docker and Postgres to be re-run.
-5. The sandbox cold-start and container-reaping fixes are **unverified**.
-6. Colour contrast is unverified; needs a real browser.
+4. Colour contrast is unverified; jsdom cannot sample pixels. Needs a real browser.
+5. The memory ceiling is a sampled guard, not a kernel cap — see §3.2.
 
 **Functional gaps**
 
@@ -222,5 +252,7 @@ No provider keys are needed: every test mocks its providers and demo mode is det
 3. **Trademark screen "Loopcraft"** before any spend — USPTO TESS Classes 41 and 42, plus
    common-law, EUIPO and UKIPO. Not done here.
 4. **Counsel review** of `docs/claims-policy.md`, the compliance page, and the ToS exclusions.
-5. **Free disk space.** The host is at 100%; three test suites and the sandbox cannot run
-   until Docker recovers.
+5. **Whether the Seatbelt sandbox is strong enough for untrusted public traffic.** It is
+   solid for a rehearsal product, but it is a single-user OS confinement rather than a VM
+   boundary, and its memory ceiling is sampled. A gVisor or Firecracker deployment on Linux
+   is the harder posture if the threat model changes.
