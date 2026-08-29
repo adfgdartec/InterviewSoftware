@@ -114,6 +114,22 @@ importers:
         specifier: 3.2.4
         version: 3.2.4(@types/node@22.18.9)(tsx@4.20.6)
 
+  packages/design:
+    dependencies:
+      '@loopcraft/core':
+        specifier: workspace:*
+        version: link:../core
+      zod:
+        specifier: 3.25.76
+        version: 3.25.76
+    devDependencies:
+      typescript:
+        specifier: 5.9.3
+        version: 5.9.3
+      vitest:
+        specifier: 3.2.4
+        version: 3.2.4(@types/node@22.18.9)(tsx@4.20.6)
+
   packages/providers:
     dependencies:
       '@loopcraft/core':
@@ -122,6 +138,19 @@ importers:
       zod:
         specifier: 3.25.76
         version: 3.25.76
+    devDependencies:
+      typescript:
+        specifier: 5.9.3
+        version: 5.9.3
+      vitest:
+        specifier: 3.2.4
+        version: 3.2.4(@types/node@22.18.9)(tsx@4.20.6)
+
+  packages/sandbox:
+    dependencies:
+      '@loopcraft/core':
+        specifier: workspace:*
+        version: link:../core
     devDependencies:
       typescript:
         specifier: 5.9.3
