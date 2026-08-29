@@ -139,7 +139,7 @@ describe('redaction removes, rather than masks, what the prototype leaked', () =
   it.each([
     ['sk-abcdef1234567890', '[redacted]'],
     ['Authorization: Bearer eyJhbGciOi.JIUzI1NiJ9.abc', 'Bearer [redacted]'],
-    ['ANTHROPIC_API_KEY=sk-live-9999999999', '[redacted]'],
+    ['ANTHROPIC_API_KEY=sk-fixture-9999999999', '[redacted]'],
   ])('redacts %j', (input, expected) => {
     expect(redact(input)).toContain(expected);
   });
@@ -156,6 +156,6 @@ describe('redaction removes, rather than masks, what the prototype leaked', () =
   });
 
   it('does not preserve a key suffix (masking is not redaction)', () => {
-    expect(redact('key sk-live-abcdefgh12345678')).not.toMatch(/5678/);
+    expect(redact('key sk-fixture-abcdefgh12345678')).not.toMatch(/5678/);
   });
 });
