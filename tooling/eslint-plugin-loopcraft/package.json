@@ -1,0 +1,19 @@
+{
+  "name": "eslint-plugin-loopcraft",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "main": "./src/index.js",
+  "exports": { ".": "./src/index.js" },
+  "scripts": {
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@loopcraft/core": "workspace:*"
+  },
+  "devDependencies": {
+    "eslint": "9.39.1",
+    "vitest": "3.2.4",
+    "@typescript-eslint/parser": "8.46.4"
+  }
+}
