@@ -1,6 +1,6 @@
 # Loopcraft — delivery report
 
-Build date 2026-08-29 · 16 commits · 7,179 lines of TypeScript, Python and SQL
+Build date 2026-08-29 · 19 commits · 8,094 lines of TypeScript, Python and SQL
 Source of truth: [`docs/spec.md`](./spec.md) · Prototype defects avoided: [`docs/legacy-audit.md`](./legacy-audit.md)
 
 ## 1. Status against the spec's build phases
@@ -9,7 +9,7 @@ Source of truth: [`docs/spec.md`](./spec.md) · Prototype defects avoided: [`doc
 | --- | --- | --- | --- |
 | 0 | Monorepo, CI, schema, RLS, auth, entitlements, provider registry, brand | `pnpm test` green; RLS cross-tenant test passes; no secrets client-side | **Complete, verified** |
 | 1 | Durable sessions, track catalog, item bank, question generation with fallback, text-only loop | Full loop completes and resumes after refresh; contract tests pass for every track | **Complete, verified** |
-| 2 | Audio, ASR, delivery metrics, anchored grading n=3, debrief packet | Grader α vs gold set reported; no banned field names in any schema | **Partial** — the non-biometric metrics worker and the anchored rubrics exist; the grader, the debrief assembler and the gold set do not. See §6. |
+| 2 | Audio, ASR, delivery metrics, anchored grading n=3, debrief packet | Grader α vs gold set reported; no banned field names in any schema | **Partial** — the anchored n=3 grader and the debrief assembler are built and tested; the second exit condition (no banned field names) holds. The first does **not**: there is no gold set, so no α is reported. Audio capture and ASR ingestion are not wired. See §6. |
 | 3–7 | Coding sandbox, design canvas, IRT, billing, AI-infra tracks | — | **Not started.** See §6. |
 
 This build was scoped to phases 0–2 depth-first by explicit decision, rather than a thin
@@ -25,6 +25,7 @@ packages/
   core/               brand, affect vocabulary, claims gate, cost model, content catalog
   db/                 27-table schema, RLS policies, migrations, catalog seeding
   providers/          model registry, cost accounting, cost ceiling, credential handling
+  scoring/            n=3 anchored grader, uncertainty aggregation, debrief assembler
 tooling/
   eslint-plugin-loopcraft/   the no-affect-inference build gate
 ```
@@ -40,10 +41,11 @@ tooling/
 $ pnpm run test
 @loopcraft/core:test:            Tests  109 passed (109)
 @loopcraft/db:test:              Tests   18 passed (18)
+@loopcraft/scoring:test:         Tests   64 passed (64)
 eslint-plugin-loopcraft:test:    Tests   13 passed (13)
 @loopcraft/providers:test:       Tests   22 passed (22)
 @loopcraft/web:test:             Tests  118 passed (118)
- Tasks:    5 successful, 5 total
+ Tasks:    6 successful, 6 total
 
 $ cd apps/worker && .venv/bin/python -m pytest -q
 46 passed in 0.23s
@@ -55,7 +57,7 @@ $ pnpm run typecheck
  Tasks:    4 successful, 4 total
 ```
 
-**326 tests total** (280 TypeScript, 46 Python). Zero uses of `any` across `packages/*`.
+**390 tests total** (344 TypeScript, 46 Python). Zero uses of `any` across `packages/*`.
 
 ### Acceptance criteria (spec §7)
 
@@ -67,8 +69,8 @@ $ pnpm run typecheck
 | 4 | No schema infers emotion; a lint rule enforces it | `no-affect-inference` (13 rule tests) + `test_schemas_have_no_banned_fields.py` |
 | 5 | No key, path, payload or public URL reachable from the client | `no-client-secrets.test.ts` (5 scans over every tracked file) |
 | 6 | Org A cannot read org B | `rls.test.ts` — 18 tests, incl. a loop over all 20 `org_id` tables |
-| 7 | Grading reliability measured and gated | **Not met.** See §6. |
-| 8 | Every score carries an uncertainty interval | Structurally enforced: `scores.interval_low/high` are `NOT NULL`. No grader emits scores yet. |
+| 7 | Grading reliability measured and gated | **Not met** — no gold set exists, so no α is measured. The grader it would measure is built. See §6. |
+| 8 | Every score carries an uncertainty interval | **Met in the scoring layer.** `scores.interval_low/high` are `NOT NULL`; `formatScore` is the only formatter and always emits `3.4 ± 0.3`; the interval never collapses to zero even on unanimous samples. Not yet surfaced in a UI, because there is no UI. |
 | 9 | Paid actions authorized server-side | `guards.test.ts`, `routes.integration.test.ts` (402 on canceled / feature / quota) |
 | 10 | Account deletion purges rows and storage | **Not met.** `retention_jobs` table exists; the job does not. |
 | 11 | axe zero critical violations | **Not met.** No UI pages yet. |
@@ -156,15 +158,18 @@ Deferred work is recorded here rather than as a `TODO` in a source file.
 
 **Blocking a phase 2 sign-off**
 
-1. **No grader.** Anchored rubrics and the `grader_runs` / `scores` / `score_dimensions`
-   tables exist; the n=3 self-consistency grader that fills them does not.
+1. **The grader is not persisted or wired to a route.** `packages/scoring` grades a round
+   from a transcript and assembles a debrief packet, both fully tested, but nothing writes
+   `grader_runs` / `scores` / `score_dimensions`, and no route calls it. The sampler port
+   has no provider-backed implementation.
 2. **No gold set, therefore no reliability number.** Spec §2.6 requires 200+ human-labeled
    responses per major track, adjudicated by two raters. That is a data-collection
    programme, not a coding task. **No Krippendorff's α or Spearman ρ is reported anywhere
    in this build, because none has been measured.** `docs/calibration-card.md` states this
    explicitly rather than printing a placeholder statistic.
-3. **No debrief packet assembler**, and no ASR ingestion wiring the worker's metrics into a
-   session.
+3. **No ASR ingestion.** The worker computes the spec §2.7 metrics from a transcript and
+   audio timing, but nothing captures audio, calls an ASR provider, or feeds the result into
+   a session or a debrief.
 
 **Deferred by scope (phases 3–7)**
 

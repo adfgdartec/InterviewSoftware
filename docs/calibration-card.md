@@ -7,7 +7,8 @@ composition, agreement statistics, and known limitations. This version publishes
 and states plainly which numbers do not exist yet.
 
 > **No agreement statistic is reported on this page, because none has been measured.**
-> There is no gold set and no grader in this build. Any Krippendorff's α, Spearman ρ or
+> There is no gold set in this build. The grader the statistics would describe exists
+> (`packages/scoring`, 64 tests) but has never been run against human labels. Any Krippendorff's α, Spearman ρ or
 > confusion matrix printed here would be fabricated. When the gold set exists, this document
 > is regenerated from measured output and CI gates on it.
 
@@ -23,7 +24,7 @@ dimensions in 7 rubrics. Scores are never rescaled to 0–100, and there is no "
 threshold. The audited predecessor did both, along with an arbitrary 15% penalty applied
 twice; none of that is reproduced.
 
-## Grading method (specified; not yet implemented)
+## Grading method (implemented in `packages/scoring`; not yet wired to a route)
 
 1. **Grader separation.** The interviewer model never grades. A separate grader receives
    only the transcript, the artifacts, and the rubric — never the interviewer's reasoning.
@@ -76,8 +77,9 @@ there is no baseline to drop from.
 
 ## Known limitations
 
-1. **No measured reliability.** The largest limitation. Until the gold set exists, the
-   scoring method is a stated design, not a validated instrument.
+1. **No measured reliability.** The largest limitation. The grader is implemented and
+   tested for contract conformance, but conformance is not accuracy: until the gold set
+   exists it is an unvalidated instrument.
 2. **No IRT calibration.** Item `difficulty_b` and `discrimination_a` are cold-started from
    expert tagging. Spec §2.5 requires recalibration from response data once an item has ≥200
    responses; `item_stats.response_count` is `0` for all 124 items.
