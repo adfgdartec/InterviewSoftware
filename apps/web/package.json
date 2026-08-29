@@ -9,22 +9,26 @@
     "start": "next start -p 3100",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run"
+    "test": "vitest run && vitest run --config vitest.a11y.config.ts",
+    "test:a11y": "vitest run --config vitest.a11y.config.ts"
   },
   "dependencies": {
     "@loopcraft/core": "workspace:*",
     "@loopcraft/db": "workspace:*",
     "@loopcraft/providers": "workspace:*",
+    "@loopcraft/scoring": "workspace:*",
     "next": "15.5.4",
+    "postgres": "3.4.7",
     "react": "19.1.1",
     "react-dom": "19.1.1",
-    "zod": "3.25.76",
-    "postgres": "3.4.7",
-    "@loopcraft/scoring": "workspace:*"
+    "zod": "3.25.76"
   },
   "devDependencies": {
+    "@types/jsdom": "21.1.7",
     "@types/react": "19.1.13",
     "@types/react-dom": "19.1.9",
+    "axe-core": "4.10.2",
+    "jsdom": "25.0.1",
     "typescript": "5.9.3",
     "vitest": "3.2.4"
   }

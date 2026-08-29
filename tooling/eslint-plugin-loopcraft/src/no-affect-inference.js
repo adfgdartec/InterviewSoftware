@@ -94,6 +94,15 @@ export const noAffectInference = {
         if (hits.length === 0) return;
         context.report({ node, messageId: 'bannedString', data: { token: hits[0].token } });
       },
+      // JSX text is where nearly all user-facing copy actually lives. Without this the rule
+      // checks string literals and misses the prose a candidate reads on screen, which is
+      // precisely the surface guardrail 1 exists to protect.
+      JSXText(node) {
+        if (!checkStrings) return;
+        const hits = findBannedTokensInText(node.value);
+        if (hits.length === 0) return;
+        context.report({ node, messageId: 'bannedString', data: { token: hits[0].token } });
+      },
     };
   },
 };

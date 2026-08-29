@@ -11,6 +11,7 @@ const ruleTester = new RuleTester({
     parser: tsParser,
     ecmaVersion: 2023,
     sourceType: 'module',
+    parserOptions: { ecmaFeatures: { jsx: true } },
   },
 });
 
@@ -25,6 +26,9 @@ ruleTester.run('no-affect-inference', noAffectInference, {
     'const copy = `Reported with a confidence band of ±0.6`;',
     // Unrelated words that merely contain a banned substring.
     'const x = { confidentialityNotice: true };',
+    // JSX prose that is clean stays clean.
+    'const P = () => <p>Words per minute and filler ratio are measured from the transcript.</p>;',
+    'const P = () => <p>Structure: 3.4 with a 95% confidence interval.</p>;',
   ],
   invalid: [
     {
@@ -54,6 +58,15 @@ ruleTester.run('no-affect-inference', noAffectInference, {
     {
       code: 'const r = { "facial-expression": 1 };',
       errors: [{ messageId: 'bannedField' }],
+    },
+    {
+      // User-facing copy lives in JSX text, so the rule must reach it.
+      code: 'const P = () => <p>Your engagement dipped in round three.</p>;',
+      errors: [{ messageId: 'bannedString', data: { token: 'engagement' } }],
+    },
+    {
+      code: 'const P = () => <section><h2>Mood</h2><p>We scored how enthusiastic you sounded.</p></section>;',
+      errors: [{ messageId: 'bannedString' }, { messageId: 'bannedString' }],
     },
   ],
 });

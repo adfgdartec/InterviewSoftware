@@ -33,6 +33,12 @@ export default tseslint.config(
       'packages/core/src/banned-tokens.ts',
       'tooling/eslint-plugin-loopcraft/src/**',
       'eslint.config.js',
+      // The compliance position paper and the calibration card exist to STATE the
+      // prohibition. They are the one user-facing surface that must name the vocabulary --
+      // "Loopcraft never infers emotion" cannot be written without the word. Both pages are
+      // covered instead by a test asserting they only ever use the terms in the negative.
+      'apps/web/src/app/compliance/page.tsx',
+      'apps/web/src/app/calibration/page.tsx',
     ],
     rules: { 'loopcraft/no-affect-inference': 'off' },
   },
