@@ -1,0 +1,15 @@
+{
+  "$comment": "Vendor rates in USD. Every value is null until an engineer fills it in from current vendor pricing. estimateSessionCost() throws naming any null it needs, so the cost model can never invent a price (guardrail 8, spec §4). Update `asOf` whenever a rate changes.",
+  "asOf": null,
+  "currency": "USD",
+  "asrPerMinute": null,
+  "ttsPerThousandCharacters": null,
+  "llm": {
+    "questionGeneration": { "inputPerMillionTokens": null, "outputPerMillionTokens": null },
+    "grading": { "inputPerMillionTokens": null, "outputPerMillionTokens": null }
+  },
+  "codeExecutionPerCpuSecond": null,
+  "storagePerGigabyteMonth": null,
+  "egressPerGigabyte": null,
+  "payment": { "percentOfTransaction": null, "fixedPerTransaction": null }
+}
