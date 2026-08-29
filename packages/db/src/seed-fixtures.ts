@@ -15,6 +15,8 @@ export const FIXTURE = {
   trackId: 'ml-systems',
   rubricId: 'ml-systems.domain.v1',
   templateId: 'frontier-lab-ml-systems',
+  periodStart: new Date('2026-08-01T00:00:00Z'),
+  periodEnd: new Date('2027-08-01T00:00:00Z'),
 } as const;
 
 
@@ -63,6 +65,17 @@ export async function seedTwoTenants(sql: Sql): Promise<void> {
               ${sql.array(['https://example.test/careers/interview-process'])},
               'Modeled on publicly reported interview formats. Not affiliated with any employer.')
       on conflict (id) do nothing`;
+
+  // Both orgs get a current Pro entitlement. pro-monthly is auto-renewing, so this also
+  // exercises the spec §5.4 constraint trigger: the insert fails without recorded consent.
+  await sql`
+    insert into entitlements (org_id, plan_id, status, current_period_start, current_period_end,
+                              renewal_consent_at, renewal_consent_version)
+      values (${FIXTURE.orgA}, ${FIXTURE.planId}, 'active',
+              ${FIXTURE.periodStart}, ${FIXTURE.periodEnd}, ${FIXTURE.periodStart}, 'arl-v1'),
+             (${FIXTURE.orgB}, ${FIXTURE.planId}, 'active',
+              ${FIXTURE.periodStart}, ${FIXTURE.periodEnd}, ${FIXTURE.periodStart}, 'arl-v1')
+      on conflict do nothing`;
 
   await sql`
     insert into sessions (id, org_id, user_id, loop_template_id, track_id, level_band)

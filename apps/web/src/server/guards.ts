@@ -144,6 +144,23 @@ export async function guard<TSchema extends z.ZodTypeAny>(
   return { user, entitlement, body: parsed.data, idempotencyKey };
 }
 
+/**
+ * Errors raised by the loop engine. Declared here rather than imported to keep guards.ts
+ * free of a dependency on the engine; the engine's classes structurally satisfy this.
+ */
+export interface HttpStatusError {
+  readonly httpStatus: number;
+  readonly message: string;
+}
+
+function hasHttpStatus(error: unknown): error is HttpStatusError {
+  return (
+    typeof error === 'object' &&
+    error !== null &&
+    typeof (error as { httpStatus?: unknown }).httpStatus === 'number'
+  );
+}
+
 export interface ErrorBody {
   readonly error: string;
   readonly code: string;
@@ -169,6 +186,14 @@ export function toErrorResponse(error: unknown, errorId: string): { status: numb
   }
   if (error instanceof ValidationError) {
     return { status: 400, body: { error: error.issues.join('; '), code: 'invalid_request', errorId } };
+  }
+  // Engine errors (session not found, loop already complete) carry their own status. They
+  // are mapped here rather than falling through to 500, which would both mislead the client
+  // and turn a legitimate 404 into a page that looks like an outage.
+  if (hasHttpStatus(error)) {
+    const status = error.httpStatus;
+    const code = status === 404 ? 'not_found' : status === 409 ? 'conflict' : 'request_failed';
+    return { status, body: { error: error.message, code, errorId } };
   }
   return {
     status: 500,
