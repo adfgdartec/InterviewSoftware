@@ -13,9 +13,13 @@
     "typecheck": "turbo run typecheck",
     "test": "turbo run test --concurrency=1",
     "test:rls": "pnpm --filter @loopcraft/db test:rls",
-    "db:up": "docker compose up -d postgres",
-    "db:down": "docker compose down",
-    "db:migrate": "pnpm --filter @loopcraft/db migrate"
+    "db:migrate": "pnpm --filter @loopcraft/db migrate",
+    "db:init": "./scripts/pg.sh init",
+    "db:start": "./scripts/pg.sh start",
+    "db:stop": "./scripts/pg.sh stop",
+    "db:status": "./scripts/pg.sh status",
+    "dev:web": "pnpm --filter @loopcraft/web dev",
+    "dev:worker": "apps/worker/.venv/bin/uvicorn loopcraft_worker.app:app --app-dir apps/worker --port 8099"
   },
   "devDependencies": {
     "turbo": "2.5.8",

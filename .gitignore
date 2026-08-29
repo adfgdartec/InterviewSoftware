@@ -28,3 +28,6 @@ test-results/
 
 # Python editable-install artifacts
 *.egg-info/
+
+# Local Postgres cluster (native)
+.pgdata/

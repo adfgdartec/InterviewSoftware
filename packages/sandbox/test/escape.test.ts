@@ -1,60 +1,70 @@
 import { beforeAll, describe, expect, it } from 'vitest';
-import { execFileSync } from 'node:child_process';
+import { accessSync, constants, existsSync, readFileSync } from 'node:fs';
 import { runInSandbox } from '../src/runner.js';
-import { DEFAULT_LIMITS, hardenedRunArgs } from '../src/limits.js';
+import {
+  DEFAULT_LIMITS,
+  PYTHON_BINARY,
+  SANDBOX_BINARY,
+  seatbeltProfile,
+  sandboxArgs,
+} from '../src/limits.js';
 
 /**
  * Phase 3 exit criterion: "Sandbox escape suite passes."
  *
- * These are real container executions, not mocks. A mocked escape suite proves nothing --
- * the whole question is whether the flags in hardenedRunArgs actually hold, and only the
- * daemon can answer that. If Docker is unavailable the suite FAILS rather than skipping:
- * an escape suite that silently no-ops is worse than none, because it reports green.
+ * These are real confined executions, not mocks. A mocked escape suite proves nothing: the
+ * entire question is whether the Seatbelt profile and the resource limits actually hold, and
+ * only the kernel can answer that. If the sandbox binary or interpreter is missing the suite
+ * FAILS rather than skipping -- an escape suite that silently no-ops reports green while
+ * proving nothing.
  */
 
-let dockerAvailable = false;
+let toolingAvailable = false;
 
 beforeAll(() => {
   try {
-    execFileSync('docker', ['info', '--format', '{{.ServerVersion}}'], { stdio: 'pipe' });
-    execFileSync('docker', ['image', 'inspect', 'python:3.12-alpine'], { stdio: 'pipe' });
-    dockerAvailable = true;
+    accessSync(SANDBOX_BINARY, constants.X_OK);
+    accessSync(PYTHON_BINARY, constants.X_OK);
+    toolingAvailable = true;
   } catch {
-    dockerAvailable = false;
+    toolingAvailable = false;
   }
 });
 
 it('has a working sandbox to test against', () => {
   expect(
-    dockerAvailable,
-    'Docker daemon or python:3.12-alpine unavailable. Run `docker pull python:3.12-alpine`. ' +
-      'This suite fails rather than skips: a green escape suite that never ran is a lie.',
+    toolingAvailable,
+    `Need ${SANDBOX_BINARY} and ${PYTHON_BINARY}. This suite fails rather than skips: a ` +
+      'green escape suite that never ran is a lie.',
   ).toBe(true);
 });
 
-describe('the container flags are all present', () => {
-  const args = hardenedRunArgs(DEFAULT_LIMITS);
-  const joined = args.join(' ');
+describe('the Seatbelt profile denies by default', () => {
+  const profile = seatbeltProfile('/tmp/scratch-example');
 
-  it.each([
-    ['no network', '--network none'],
-    ['memory ceiling', `--memory ${DEFAULT_LIMITS.memoryBytes}b`],
-    ['swap disabled', `--memory-swap ${DEFAULT_LIMITS.memoryBytes}b`],
-    ['pids capped', `--pids-limit ${DEFAULT_LIMITS.pids}`],
-    ['read-only rootfs', '--read-only'],
-    ['all capabilities dropped', '--cap-drop ALL'],
-    ['no privilege escalation', '--security-opt no-new-privileges'],
-    ['non-root user', '--user 65534:65534'],
-    ['noexec tmpfs', 'noexec'],
-  ])('sets %s', (_label, flag) => {
-    expect(joined).toContain(flag);
+  it('starts from deny default, so a forgotten rule fails closed', () => {
+    expect(profile).toContain('(deny default)');
   });
 
-  it('never runs as root and never mounts the host', () => {
-    expect(joined).not.toContain('--privileged');
-    expect(joined).not.toContain('-v ');
-    expect(joined).not.toContain('--volume');
-    expect(joined).not.toContain('/var/run/docker.sock');
+  it('denies all network operations', () => {
+    expect(profile).toContain('(deny network*)');
+  });
+
+  it('permits writes to exactly one scratch subpath', () => {
+    expect(profile).toContain('(allow file-write* (subpath "/tmp/scratch-example"))');
+    const writeRules = profile.split('\n').filter((l) => l.includes('file-write'));
+    expect(writeRules).toHaveLength(1);
+  });
+
+  it('rejects a relative scratch path, which would not confine anything', () => {
+    expect(() => seatbeltProfile('relative/path')).toThrow(/must be absolute/);
+  });
+
+  it('runs the interpreter isolated from user site-packages', () => {
+    const args = sandboxArgs(profile, '/tmp/x.py');
+    expect(args).toContain('-I');
+    expect(args).toContain('-S');
+    expect(args[args.length - 1]).toBe('/tmp/x.py');
   });
 });
 
@@ -71,68 +81,82 @@ describe('escape attempts (real execution)', () => {
     expect(r.stdout.trim()).toBe('ABC');
   }, 30_000);
 
-  it('denies outbound network at the interface level, not by timeout', async () => {
+  it('denies outbound sockets at the syscall boundary, not by timeout', async () => {
     const r = await runInSandbox(
       'import socket\ns = socket.socket()\ns.settimeout(2)\ns.connect(("1.1.1.1", 80))\nprint("CONNECTED")',
     );
     expect(r.stdout).not.toContain('CONNECTED');
     expect(r.outcome).toBe('nonzero_exit');
-    expect(r.stderr).toMatch(/Network( is)? unreachable/i);
+    expect(r.stderr).toMatch(/Operation not permitted/i);
+    // Denied immediately, not by exhausting the wall clock.
+    expect(r.durationMs).toBeLessThan(DEFAULT_LIMITS.wallClockMs);
   }, 30_000);
 
-  it('denies DNS as well as raw sockets', async () => {
+  it('denies DNS resolution as well as raw sockets', async () => {
     const r = await runInSandbox(
       'import socket\ntry:\n  print("RESOLVED", socket.gethostbyname("example.com"))\nexcept Exception as e:\n  print("denied", type(e).__name__)',
     );
     expect(r.stdout).not.toContain('RESOLVED');
-  }, 30_000);
-
-  it('runs as nobody, never as root', async () => {
-    const r = await runInSandbox('import os\nprint("uid", os.getuid(), "gid", os.getgid())');
-    expect(r.stdout).toMatch(/uid 65534\b/);
-  }, 30_000);
-
-  it('cannot escalate to root', async () => {
-    const r = await runInSandbox(
-      'import os\ntry:\n  os.setuid(0)\n  print("ROOT")\nexcept Exception as e:\n  print("denied", type(e).__name__)',
-    );
-    expect(r.stdout).not.toContain('ROOT');
     expect(r.stdout).toContain('denied');
   }, 30_000);
 
-  it('cannot see the host filesystem or the docker socket', async () => {
-    const r = await runInSandbox(
-      'import os\nprint(os.path.exists("/Users"), os.path.exists("/host"), os.path.exists("/var/run/docker.sock"))',
-    );
-    expect(r.stdout.trim()).toBe('False False False');
-  }, 30_000);
-
-  it('cannot write to the root filesystem', async () => {
-    const r = await runInSandbox('open("/pwned", "w").write("x")\nprint("WROTE")');
+  it('cannot write into the user home directory', async () => {
+    const target = '/Users/aditrajaram/loopcraft-escape-probe';
+    const r = await runInSandbox(`open(${JSON.stringify(target)}, "w").write("x")\nprint("WROTE")`);
     expect(r.stdout).not.toContain('WROTE');
-    expect(r.stderr).toMatch(/Read-only file system/i);
+    expect(r.stderr).toMatch(/Operation not permitted/i);
+    expect(existsSync(target)).toBe(false);
   }, 30_000);
 
-  it('can write to its own /tmp, which is where legitimate work happens', async () => {
-    const r = await runInSandbox('open("/tmp/scratch", "w").write("x")\nprint("ok")');
+  it('cannot write to system directories', async () => {
+    const r = await runInSandbox('open("/etc/loopcraft-pwned", "w").write("x")\nprint("WROTE")');
+    expect(r.stdout).not.toContain('WROTE');
+    expect(r.stderr).toMatch(/Operation not permitted/i);
+    expect(existsSync('/etc/loopcraft-pwned')).toBe(false);
+  }, 30_000);
+
+  it('cannot write next to the repository it is running from', async () => {
+    const target = `${process.cwd()}/loopcraft-escape-probe`;
+    const r = await runInSandbox(`open(${JSON.stringify(target)}, "w").write("x")\nprint("WROTE")`);
+    expect(r.stdout).not.toContain('WROTE');
+    expect(existsSync(target)).toBe(false);
+  }, 30_000);
+
+  it('can write to its own scratch directory, where legitimate work happens', async () => {
+    const r = await runInSandbox(
+      'open("scratch.txt", "w").write("ok")\nprint(open("scratch.txt").read())',
+    );
     expect(r.outcome).toBe('ok');
+    expect(r.stdout.trim()).toBe('ok');
   }, 30_000);
 
-  it('survives a fork bomb via the pids limit', async () => {
+  it('gives each run its own scratch directory', async () => {
+    const write = await runInSandbox('open("leak.txt", "w").write("secret")\nprint("wrote")');
+    expect(write.outcome).toBe('ok');
+    const read = await runInSandbox(
+      'import os\nprint(open("leak.txt").read() if os.path.exists("leak.txt") else "absent")',
+    );
+    expect(read.stdout.trim()).toBe('absent');
+  }, 40_000);
+
+  it('stops a fork bomb at the process limit', async () => {
     const r = await runInSandbox('import os\nwhile True:\n    os.fork()');
     expect(r.outcome).toBe('nonzero_exit');
     expect(r.stderr).toMatch(/Resource temporarily unavailable|BlockingIOError/i);
   }, 45_000);
 
-  it('kills a memory bomb at the ceiling', async () => {
-    const r = await runInSandbox('x = []\nwhile True:\n    x.append(bytearray(10_000_000))');
+  it('kills a memory bomb at the ceiling, without overshooting it', async () => {
+    const r = await runInSandbox('x = []\nwhile True:\n    x.append(bytearray(20_000_000))');
     expect(r.outcome).toBe('out_of_memory');
+    // The in-process guard reacts in milliseconds; the parent RSS poll is only a backstop.
+    // Asserting the peak stays under the ceiling is what proves the guard, not the poll, won.
+    expect(r.peakRssBytes).toBeLessThan(DEFAULT_LIMITS.memoryBytes);
   }, 45_000);
 
   it('kills an infinite loop at the wall clock', async () => {
     const r = await runInSandbox('while True:\n    pass');
     expect(r.outcome).toBe('timeout');
-    expect(r.durationMs).toBeLessThan(DEFAULT_LIMITS.wallClockMs + 3_000);
+    expect(r.durationMs).toBeLessThan(DEFAULT_LIMITS.wallClockMs + 2_000);
   }, 30_000);
 
   it('truncates an unbounded print rather than filling host memory', async () => {
@@ -147,9 +171,26 @@ describe('escape attempts (real execution)', () => {
     expect(r.stderr).toContain('ValueError');
   }, 30_000);
 
-  it('reports an unavailable sandbox instead of falling back to host execution', async () => {
-    const r = await runInSandbox('print(1)', { dockerBinary: '/nonexistent/docker' });
+  it('reports an unavailable sandbox instead of running the code unconfined', async () => {
+    const r = await runInSandbox('print("SHOULD NOT RUN")', {
+      sandboxBinary: '/nonexistent/sandbox-exec',
+    });
     expect(r.outcome).toBe('sandbox_unavailable');
     expect(r.stdout).toBe('');
   }, 30_000);
+
+  it('leaves no scratch directory behind', async () => {
+    const r = await runInSandbox('import os\nprint(os.getcwd())');
+    expect(r.outcome).toBe('ok');
+    expect(existsSync(r.stdout.trim())).toBe(false);
+  }, 30_000);
+
+  it('never evaluates the submission in the host process', () => {
+    // The strongest statement this suite can make about spec §2.2's "never eval in the app
+    // process": the module contains no eval, no Function constructor, and no dynamic import.
+    const source = readFileSync(new URL('../src/runner.ts', import.meta.url), 'utf8');
+    expect(source).not.toMatch(/\beval\s*\(/);
+    expect(source).not.toMatch(/new\s+Function\s*\(/);
+    expect(source).not.toMatch(/vm\.runIn/);
+  });
 });

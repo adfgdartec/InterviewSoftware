@@ -3,7 +3,7 @@
  * an operator sets LOOPCRAFT_ALLOW_REMOTE_MIGRATIONS explicitly, so a stray DATABASE_URL
  * pointing at production cannot be migrated by accident.
  */
-const LOCAL_HOSTS = new Set(['localhost', '127.0.0.1', '::1', 'postgres', 'host.docker.internal']);
+const LOCAL_HOSTS = new Set(['localhost', '127.0.0.1', '::1', 'postgres']);
 
 export const DEFAULT_LOCAL_URL =
   'postgres://loopcraft:loopcraft_local_dev@localhost:54329/loopcraft';

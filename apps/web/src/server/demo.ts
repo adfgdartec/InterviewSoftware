@@ -10,7 +10,7 @@ import type { QuestionGenerator, QuestionRequest } from './question-generation.j
 
 export const DEMO_ENV_VAR = 'LOOPCRAFT_DEMO';
 
-export function isDemoMode(env: NodeJS.ProcessEnv = process.env): boolean {
+export function isDemoMode(env: Readonly<Record<string, string | undefined>> = process.env): boolean {
   return env[DEMO_ENV_VAR] === '1';
 }
 

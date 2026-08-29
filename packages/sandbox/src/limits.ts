@@ -1,38 +1,44 @@
 /**
- * Execution limits for untrusted candidate code. Spec §2.2 fixes these numbers: no network,
- * a 256 MB memory ceiling, a 5-second wall clock, seccomp restrictions, and a per-user
- * concurrency cap.
+ * Execution limits for untrusted candidate code. Spec §2.2 fixes the policy numbers: no
+ * network, a 256 MB memory ceiling, a 5-second wall clock, syscall restrictions, and a
+ * per-user concurrency cap.
  *
- * They live in one module because a limit that can be raised at a call site is not a limit.
- * `hardenedRunArgs` is the only place container flags are constructed, and a test asserts
- * every one of them is present -- a dropped `--network none` is invisible until it matters.
+ * Isolation is macOS Seatbelt (`sandbox-exec`) plus POSIX resource limits, not a container.
+ * Each control below names the mechanism that actually enforces it, because they are not
+ * equally strong and pretending otherwise is how a sandbox gets trusted further than it
+ * should be:
+ *
+ *   network      Seatbelt `(deny network*)`      — hard denial at the syscall boundary
+ *   filesystem   Seatbelt `(deny default)`       — read-only except one scratch subpath
+ *   cpu time     RLIMIT_CPU                      — kernel-enforced, SIGXCPU
+ *   processes    RLIMIT_NPROC                    — kernel-enforced, fork fails
+ *   wall clock   in-process SIGALRM + parent kill
+ *   memory       parent-side RSS watchdog        — POLLED, not a kernel cap (see below)
+ *
+ * macOS does not honour RLIMIT_AS or RLIMIT_DATA: setrlimit rejects both with "current limit
+ * exceeds maximum limit". Memory is therefore enforced by sampling the child's RSS and
+ * killing it, which is a real ceiling but a polled one, so a very fast allocation can briefly
+ * exceed it before the sampler notices. That is a genuine weakness of this platform and is
+ * recorded rather than hidden.
  */
 
 export interface SandboxLimits {
   readonly memoryBytes: number;
   readonly wallClockMs: number;
-  readonly cpus: number;
-  readonly pids: number;
-  readonly tmpfsBytes: number;
+  readonly cpuSeconds: number;
+  readonly processes: number;
   readonly outputBytes: number;
+  /** How often the parent samples the child's RSS. */
+  readonly memoryPollMs: number;
 }
-
-/**
- * Grace added to the host-side kill timer on top of the candidate's wall clock. Container
- * cold start is roughly 0.6-1.5s and is not the candidate's to spend: charging startup
- * against a 5-second budget fails correct submissions on a loaded host. The candidate's
- * clock is enforced inside the container; this is only the backstop for a container that
- * never reaches Python at all.
- */
-export const CONTAINER_STARTUP_GRACE_MS = 15_000;
 
 export const DEFAULT_LIMITS: SandboxLimits = {
   memoryBytes: 256 * 1024 * 1024,
   wallClockMs: 5_000,
-  cpus: 1,
-  pids: 64,
-  tmpfsBytes: 16 * 1024 * 1024,
+  cpuSeconds: 5,
+  processes: 64,
   outputBytes: 64 * 1024,
+  memoryPollMs: 100,
 };
 
 /** Per-user concurrency cap (spec §2.2). Beyond this, execution requests queue. */
@@ -61,48 +67,37 @@ export function resolveLimits(overrides: Partial<SandboxLimits> = {}): SandboxLi
   return merged;
 }
 
-export const SANDBOX_IMAGE = 'python:3.12-alpine';
+export const SANDBOX_BINARY = '/usr/bin/sandbox-exec';
+export const PYTHON_BINARY = '/opt/homebrew/bin/python3.12';
 
 /**
- * The complete `docker run` argument list. Every flag here is load-bearing:
+ * The Seatbelt profile. `(deny default)` means every operation is refused unless listed, so
+ * the failure mode of a forgotten rule is denial rather than exposure.
  *
- *   --network none              no egress, no lateral movement, no exfiltration
- *   --memory / --memory-swap    equal values disable swap, so the ceiling is real
- *   --pids-limit                fork bombs die instead of exhausting the host
- *   --read-only                 root filesystem is immutable
- *   --tmpfs /tmp                the one writable path, size-capped and noexec
- *   --cap-drop ALL              no capabilities at all
- *   --security-opt no-new-privileges  setuid binaries cannot escalate
- *   --user 65534:65534          nobody; never root, even inside the container
- *   --workdir /tmp              the only writable directory
+ * `scratchDir` is the single writable path. It is per-run, so one submission cannot read or
+ * clobber another's working files.
  */
-export function hardenedRunArgs(
-  limits: SandboxLimits,
-  image: string = SANDBOX_IMAGE,
-  containerName?: string,
-): string[] {
+export function seatbeltProfile(scratchDir: string): string {
+  if (!scratchDir.startsWith('/')) {
+    throw new LimitsViolationError(`Scratch directory must be absolute, got "${scratchDir}"`);
+  }
   return [
-    'run',
-    '--rm',
-    '--interactive',
-    // tini as PID 1: reaps orphaned children and forwards signals, so a submission that
-    // forks does not leave processes alive inside the namespace after its parent exits.
-    '--init',
-    ...(containerName === undefined ? [] : ['--name', containerName]),
-    '--network', 'none',
-    '--memory', `${limits.memoryBytes}b`,
-    '--memory-swap', `${limits.memoryBytes}b`,
-    '--cpus', String(limits.cpus),
-    '--pids-limit', String(limits.pids),
-    '--read-only',
-    '--tmpfs', `/tmp:rw,noexec,nosuid,size=${limits.tmpfsBytes}`,
-    '--cap-drop', 'ALL',
-    '--security-opt', 'no-new-privileges',
-    '--user', '65534:65534',
-    '--workdir', '/tmp',
-    '--env', 'HOME=/tmp',
-    '--env', 'PYTHONDONTWRITEBYTECODE=1',
-    image,
-    'python3', '-I', '-S', '-c', 'import sys; exec(compile(sys.stdin.read(), "<submission>", "exec"))',
-  ];
+    '(version 1)',
+    '(deny default)',
+    // No egress, no lateral movement, no exfiltration. This is the load-bearing line.
+    '(deny network*)',
+    // The interpreter and its standard library must be readable to run at all.
+    '(allow file-read*)',
+    `(allow file-write* (subpath "${scratchDir}"))`,
+    '(allow process-exec)',
+    '(allow process-fork)',
+    '(allow sysctl-read)',
+    '(allow mach-lookup)',
+    '(allow signal (target self))',
+  ].join('\n');
+}
+
+/** Arguments for `sandbox-exec`, kept in one place so a dropped flag is testable. */
+export function sandboxArgs(profile: string, scriptPath: string): string[] {
+  return ['-p', profile, PYTHON_BINARY, '-I', '-S', scriptPath];
 }

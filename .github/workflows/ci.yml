@@ -12,21 +12,22 @@ concurrency:
 jobs:
   node:
     runs-on: ubuntu-latest
-    services:
-      postgres:
-        image: postgres:16-alpine
-        env:
-          POSTGRES_USER: loopcraft
-          POSTGRES_PASSWORD: loopcraft_local_dev
-          POSTGRES_DB: loopcraft
-        ports: ['54329:5432']
-        options: >-
-          --health-cmd "pg_isready -U loopcraft -d loopcraft"
-          --health-interval 2s --health-timeout 3s --health-retries 30
     env:
       DATABASE_URL: postgres://loopcraft:loopcraft_local_dev@localhost:54329/loopcraft
     steps:
       - uses: actions/checkout@v4
+
+      # Loopcraft does not use Docker. Postgres runs as a native cluster; the code sandbox
+      # is macOS Seatbelt, which is why the sandbox job below runs on macOS.
+      - name: start native postgres
+        run: |
+          sudo apt-get update && sudo apt-get install -y postgresql-16
+          export PATH="/usr/lib/postgresql/16/bin:$PATH"
+          initdb -D "$PWD/.pgdata" -U loopcraft --auth=trust
+          pg_ctl -D "$PWD/.pgdata" -o "-p 54329 -k /tmp" -l "$PWD/.pgdata/server.log" start
+          until pg_isready -h 127.0.0.1 -p 54329 -U loopcraft; do sleep 1; done
+          psql -h 127.0.0.1 -p 54329 -U loopcraft -d postgres -c 'create database loopcraft'
+
       - uses: pnpm/action-setup@v4
         with:
           version: 10.33.0
@@ -50,6 +51,26 @@ jobs:
       # Acceptance criterion 6, called out separately so a failure is unmissable in the log.
       - name: RLS cross-tenant denial
         run: pnpm run test:rls
+
+      - name: accessibility (axe)
+        run: pnpm --filter @loopcraft/web test:a11y
+
+  # The code sandbox is macOS Seatbelt (sandbox-exec), so its escape suite can only run on a
+  # macOS runner. It fails rather than skips when the tooling is absent, deliberately.
+  sandbox:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.33.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: sandbox escape suite
+        run: pnpm --filter @loopcraft/sandbox test
 
   python:
     runs-on: ubuntu-latest

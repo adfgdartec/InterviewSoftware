@@ -8,7 +8,7 @@ import { findBannedTokensInText, findClaimViolations } from '@loopcraft/core';
 import PrepPage from '../src/app/page.js';
 import CalibrationPage from '../src/app/calibration/page.js';
 import CompliancePage from '../src/app/compliance/page.js';
-import { Dashboard } from '../src/app/dashboard/page.js';
+import { Dashboard } from '../src/components/Dashboard.js';
 import { AbilityReadout, ScoreWithInterval } from '../src/components/ScoreWithInterval.js';
 
 /**

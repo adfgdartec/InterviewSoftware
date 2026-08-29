@@ -47,6 +47,8 @@ function classify(run: RunResult, expected: string): CaseOutcome {
       return 'out_of_memory';
     case 'sandbox_unavailable':
       return 'sandbox_unavailable';
+    case 'cpu_exhausted':
+      return 'timeout';
     case 'nonzero_exit':
     case 'output_truncated':
       return 'crashed';
