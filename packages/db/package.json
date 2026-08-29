@@ -12,7 +12,8 @@
   "scripts": {
     "migrate": "tsx src/migrate.ts",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "test:rls": "vitest run test/rls.test.ts"
   },
   "dependencies": {
     "@loopcraft/core": "workspace:*",
