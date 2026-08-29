@@ -1,6 +1,6 @@
 # Loopcraft — delivery report
 
-Build date 2026-08-29 · 19 commits · 8,094 lines of TypeScript, Python and SQL
+Build date 2026-08-29 · 21 commits · 8,549 lines of TypeScript, Python and SQL
 Source of truth: [`docs/spec.md`](./spec.md) · Prototype defects avoided: [`docs/legacy-audit.md`](./legacy-audit.md)
 
 ## 1. Status against the spec's build phases
@@ -9,7 +9,7 @@ Source of truth: [`docs/spec.md`](./spec.md) · Prototype defects avoided: [`doc
 | --- | --- | --- | --- |
 | 0 | Monorepo, CI, schema, RLS, auth, entitlements, provider registry, brand | `pnpm test` green; RLS cross-tenant test passes; no secrets client-side | **Complete, verified** |
 | 1 | Durable sessions, track catalog, item bank, question generation with fallback, text-only loop | Full loop completes and resumes after refresh; contract tests pass for every track | **Complete, verified** |
-| 2 | Audio, ASR, delivery metrics, anchored grading n=3, debrief packet | Grader α vs gold set reported; no banned field names in any schema | **Partial** — the anchored n=3 grader and the debrief assembler are built and tested; the second exit condition (no banned field names) holds. The first does **not**: there is no gold set, so no α is reported. Audio capture and ASR ingestion are not wired. See §6. |
+| 2 | Audio, ASR, delivery metrics, anchored grading n=3, debrief packet | Grader α vs gold set reported; no banned field names in any schema | **Partial** — the anchored n=3 grader and the debrief packet are built, persisted, and wired end to end through `POST /api/sessions/:id/debrief`; the second exit condition (no banned field names) holds. The first does **not**: there is no gold set, so no α is reported. Audio capture and ASR ingestion are not wired. See §6. |
 | 3–7 | Coding sandbox, design canvas, IRT, billing, AI-infra tracks | — | **Not started.** See §6. |
 
 This build was scoped to phases 0–2 depth-first by explicit decision, rather than a thin
@@ -44,7 +44,7 @@ $ pnpm run test
 @loopcraft/scoring:test:         Tests   64 passed (64)
 eslint-plugin-loopcraft:test:    Tests   13 passed (13)
 @loopcraft/providers:test:       Tests   22 passed (22)
-@loopcraft/web:test:             Tests  118 passed (118)
+@loopcraft/web:test:             Tests  125 passed (125)
  Tasks:    6 successful, 6 total
 
 $ cd apps/worker && .venv/bin/python -m pytest -q
@@ -57,7 +57,7 @@ $ pnpm run typecheck
  Tasks:    4 successful, 4 total
 ```
 
-**390 tests total** (344 TypeScript, 46 Python). Zero uses of `any` across `packages/*`.
+**397 tests total** (351 TypeScript, 46 Python). Zero uses of `any` across `packages/*`.
 
 ### Acceptance criteria (spec §7)
 
@@ -70,7 +70,7 @@ $ pnpm run typecheck
 | 5 | No key, path, payload or public URL reachable from the client | `no-client-secrets.test.ts` (5 scans over every tracked file) |
 | 6 | Org A cannot read org B | `rls.test.ts` — 18 tests, incl. a loop over all 20 `org_id` tables |
 | 7 | Grading reliability measured and gated | **Not met** — no gold set exists, so no α is measured. The grader it would measure is built. See §6. |
-| 8 | Every score carries an uncertainty interval | **Met in the scoring layer.** `scores.interval_low/high` are `NOT NULL`; `formatScore` is the only formatter and always emits `3.4 ± 0.3`; the interval never collapses to zero even on unanimous samples. Not yet surfaced in a UI, because there is no UI. |
+| 8 | Every score carries an uncertainty interval | **Met end to end.** `scores.interval_low/high` are `NOT NULL`; `formatScore` is the only formatter; the interval never collapses to zero even on unanimous samples; and the debrief e2e asserts every attribute the API returns matches `\d.\d ± \d.\d`. Not yet surfaced in a UI, because there is no UI. |
 | 9 | Paid actions authorized server-side | `guards.test.ts`, `routes.integration.test.ts` (402 on canceled / feature / quota) |
 | 10 | Account deletion purges rows and storage | **Not met.** `retention_jobs` table exists; the job does not. |
 | 11 | axe zero critical violations | **Not met.** No UI pages yet. |
@@ -158,10 +158,10 @@ Deferred work is recorded here rather than as a `TODO` in a source file.
 
 **Blocking a phase 2 sign-off**
 
-1. **The grader is not persisted or wired to a route.** `packages/scoring` grades a round
-   from a transcript and assembles a debrief packet, both fully tested, but nothing writes
-   `grader_runs` / `scores` / `score_dimensions`, and no route calls it. The sampler port
-   has no provider-backed implementation.
+1. **The grader sampler has no provider-backed implementation.** Grading, persistence and
+   the debrief route are complete and tested end to end, but the `GraderSampler` port is
+   only implemented by the deterministic demo sampler. Wiring it to the model named in
+   `packages/providers/src/registry.ts` is the remaining step.
 2. **No gold set, therefore no reliability number.** Spec §2.6 requires 200+ human-labeled
    responses per major track, adjudicated by two raters. That is a data-collection
    programme, not a coding task. **No Krippendorff's α or Spearman ρ is reported anywhere
