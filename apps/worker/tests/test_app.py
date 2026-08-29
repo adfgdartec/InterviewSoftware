@@ -188,7 +188,7 @@ def test_global_error_handler_hides_internal_detail(monkeypatch: pytest.MonkeyPa
     #5) — and asserts none of that detail reaches the client."""
 
     secret_path = "/var/tmp/loopcraft-worker-audio-abc123.wav"
-    fake_provider_payload = '{"provider": "deepgram", "api_key": "sk-live-verysecretvalue"}'
+    fake_provider_payload = '{"provider": "deepgram", "api_key": "sk-fixture-notarealkeyvalue"}'
 
     def _boom(payload: DeliveryMetricsRequest) -> None:
         raise RuntimeError(

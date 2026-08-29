@@ -1,4 +1,4 @@
-import postgres from 'postgres';
+import type { Sql } from './client.js';
 
 /**
  * Two isolated tenants used by the cross-tenant denial test and by demo mode. Ids are fixed
@@ -17,7 +17,6 @@ export const FIXTURE = {
   templateId: 'frontier-lab-ml-systems',
 } as const;
 
-export type Sql = ReturnType<typeof postgres>;
 
 /**
  * Inserts the two-tenant fixture. Runs on the owner connection, which bypasses RLS.
