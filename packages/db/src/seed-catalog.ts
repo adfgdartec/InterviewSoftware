@@ -77,3 +77,29 @@ export async function seedItems(sql: Sql, items: readonly Item[]): Promise<void>
       insert into item_stats (item_id) values (${i.id}) on conflict (item_id) do nothing`;
   }
 }
+
+/**
+ * Loads the whole authored catalog. Inserts a synthetic `shared` track first: four rubrics
+ * are deliberately cross-cutting (spec §2.6 -- STAR quality does not change with the
+ * candidate's specialization) but `rubrics.track_id` is NOT NULL and a foreign key, so the
+ * shared rubrics need a row to point at. It is marked inactive so it never appears in a
+ * track picker.
+ */
+export async function seedFullCatalog(
+  sql: Sql,
+  catalog: {
+    readonly tracks: readonly Track[];
+    readonly rubrics: readonly Rubric[];
+    readonly templates: readonly LoopTemplate[];
+    readonly items: readonly Item[];
+  },
+): Promise<void> {
+  await sql`
+    insert into tracks (id, name, family, ship_order, active)
+    values ('shared', 'Cross-cutting rubrics', 'general', 999, false)
+    on conflict (id) do nothing`;
+  await seedTracks(sql, catalog.tracks);
+  await seedRubrics(sql, catalog.rubrics);
+  await seedLoopTemplates(sql, catalog.templates);
+  await seedItems(sql, catalog.items);
+}
