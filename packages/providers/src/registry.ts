@@ -30,28 +30,36 @@ const entry = (
   ? { provider, model, timeoutMs, maxRetries }
   : { provider, model, timeoutMs, maxRetries, degradeTo });
 
+/**
+ * Open-source first: every reasoning purpose runs on a locally-hosted model via Ollama by
+ * default (no API key, no per-token cost, no network round trip). OpenAI is the fallback
+ * tier, used only when the local model is unavailable or degrades under the cost ceiling
+ * (packages/providers/src/ceiling.ts) -- never the default. Swap OLLAMA_HOST to point at a
+ * remote Ollama/vLLM host if the machine running this can't host the models itself.
+ */
 export const REGISTRY: readonly RegistryEntry[] = [
   {
     purpose: 'question_generation',
-    primary: entry('anthropic', 'claude-sonnet-5', 30_000, 2, 'claude-haiku-4-5-20251001'),
-    fallbacks: [entry('anthropic', 'claude-haiku-4-5-20251001', 20_000, 1)],
+    primary: entry('ollama', 'llama3.1:8b-instruct', 20_000, 2, 'llama3.2:3b-instruct'),
+    fallbacks: [entry('openai', 'gpt-4o-mini', 20_000, 1)],
   },
   {
     purpose: 'interviewer_turn',
-    primary: entry('anthropic', 'claude-sonnet-5', 25_000, 2, 'claude-haiku-4-5-20251001'),
-    fallbacks: [entry('anthropic', 'claude-haiku-4-5-20251001', 15_000, 1)],
+    primary: entry('ollama', 'llama3.1:8b-instruct', 15_000, 2, 'llama3.2:3b-instruct'),
+    fallbacks: [entry('openai', 'gpt-4o-mini', 15_000, 1)],
   },
   {
     // Spec §2.6: the grader is a separate model from the interviewer and never sees the
-    // interviewer's reasoning -- only transcript, artifacts and rubric.
+    // interviewer's reasoning -- only transcript, artifacts and rubric. Kept on a larger
+    // local model than the interviewer so the two are genuinely distinct, not just aliased.
     purpose: 'grading',
-    primary: entry('anthropic', 'claude-opus-5', 60_000, 2, 'claude-sonnet-5'),
-    fallbacks: [entry('anthropic', 'claude-sonnet-5', 40_000, 1)],
+    primary: entry('ollama', 'qwen2.5:14b-instruct', 45_000, 2, 'llama3.1:8b-instruct'),
+    fallbacks: [entry('openai', 'gpt-4o-mini', 30_000, 1)],
   },
   {
     purpose: 'debrief',
-    primary: entry('anthropic', 'claude-sonnet-5', 45_000, 2, 'claude-haiku-4-5-20251001'),
-    fallbacks: [entry('anthropic', 'claude-haiku-4-5-20251001', 25_000, 1)],
+    primary: entry('ollama', 'llama3.1:8b-instruct', 30_000, 2, 'llama3.2:3b-instruct'),
+    fallbacks: [entry('openai', 'gpt-4o-mini', 20_000, 1)],
   },
   {
     purpose: 'asr',
