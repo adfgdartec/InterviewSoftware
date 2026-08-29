@@ -25,3 +25,6 @@ __pycache__/
 playwright-report/
 test-results/
 /tmp/
+
+# Python editable-install artifacts
+*.egg-info/
