@@ -1,0 +1,66 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  node:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: loopcraft
+          POSTGRES_PASSWORD: loopcraft_local_dev
+          POSTGRES_DB: loopcraft
+        ports: ['54329:5432']
+        options: >-
+          --health-cmd "pg_isready -U loopcraft -d loopcraft"
+          --health-interval 2s --health-timeout 3s --health-retries 30
+    env:
+      DATABASE_URL: postgres://loopcraft:loopcraft_local_dev@localhost:54329/loopcraft
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.33.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+
+      # Guardrail 1: the affect-inference gate must fail the build, not warn.
+      - name: lint (includes no-affect-inference)
+        run: pnpm exec eslint .
+
+      - name: typecheck
+        run: pnpm run typecheck
+
+      # Spec §3.5 unit + contract + integration layers.
+      - name: unit and integration tests
+        run: pnpm run test
+
+      # Acceptance criterion 6, called out separately so a failure is unmissable in the log.
+      - name: RLS cross-tenant denial
+        run: pnpm run test:rls
+
+  python:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/worker
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install -e '.[dev]'
+      - name: worker tests (includes the banned-token mirror)
+        run: pytest -q
