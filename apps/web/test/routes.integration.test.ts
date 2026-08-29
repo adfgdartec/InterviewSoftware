@@ -95,6 +95,7 @@ function deps(
     turnsPerRound: 1,
     costCeilingCents: 400,
     generationTimeoutMs: 50,
+    graderSampler: null,
     ...overrides,
   };
 }

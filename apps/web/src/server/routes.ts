@@ -13,6 +13,8 @@ import {
   type SessionState,
 } from './session-engine.js';
 import { selectQuestion, type ItemSource, type QuestionGenerator } from './question-generation.js';
+import { gradeSession, loadDebrief } from './grading-service.js';
+import type { GraderSampler } from '@loopcraft/scoring';
 import type { LoopTemplate } from '@loopcraft/core';
 
 /**
@@ -38,6 +40,7 @@ export interface RouteDeps extends GuardPorts {
   readonly turnsPerRound: number;
   readonly costCeilingCents: number;
   readonly generationTimeoutMs: number;
+  readonly graderSampler: GraderSampler | null;
 }
 
 /** The client-facing projection of a session. Storage keys and item ids never cross it. */
@@ -152,6 +155,38 @@ export async function getSession(
     const view = await asUser(deps.sql, user.userId, async (tx) =>
       toView(await loadSession(tx, sessionId)));
     return json(200, view);
+  } catch (error) {
+    const { status, body } = toErrorResponse(error, errorId);
+    return json(status, body);
+  }
+}
+
+/**
+ * POST /api/sessions/:id/debrief — grades any ungraded completed rounds, then assembles the
+ * packet from stored rows. Grading is idempotent, so a retry does not re-spend provider
+ * budget or produce a second, different grade for the same round.
+ */
+export async function postDebrief(
+  request: Request,
+  sessionId: string,
+  deps: RouteDeps,
+): Promise<Response> {
+  const errorId = randomUUID();
+  try {
+    const { user } = await guard(request, deps, {
+      schema: z.object({}),
+      mutating: true,
+      rateLimitBucket: 'debrief.create',
+    });
+    if (deps.graderSampler === null) {
+      return json(503, { error: 'Grading is not configured.', code: 'grader_unavailable', errorId });
+    }
+    const sampler = deps.graderSampler;
+    const packet = await asUser(deps.sql, user.userId, async (tx) => {
+      await gradeSession(tx, sessionId, sampler);
+      return loadDebrief(tx, sessionId);
+    });
+    return json(200, packet);
   } catch (error) {
     const { status, body } = toErrorResponse(error, errorId);
     return json(status, body);

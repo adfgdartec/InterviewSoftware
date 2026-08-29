@@ -19,7 +19,8 @@
     "react": "19.1.1",
     "react-dom": "19.1.1",
     "zod": "3.25.76",
-    "postgres": "3.4.7"
+    "postgres": "3.4.7",
+    "@loopcraft/scoring": "workspace:*"
   },
   "devDependencies": {
     "@types/react": "19.1.13",

@@ -45,6 +45,7 @@ function deps(): RouteDeps {
     turnsPerRound: 1,
     costCeilingCents: 400,
     generationTimeoutMs: 200,
+    graderSampler: null,
   };
 }
 

@@ -47,6 +47,9 @@ importers:
       '@loopcraft/providers':
         specifier: workspace:*
         version: link:../../packages/providers
+      '@loopcraft/scoring':
+        specifier: workspace:*
+        version: link:../../packages/scoring
       next:
         specifier: 15.5.4
         version: 15.5.4(react-dom@19.1.1(react@19.1.1))(react@19.1.1)
