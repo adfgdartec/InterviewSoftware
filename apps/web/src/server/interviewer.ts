@@ -107,7 +107,12 @@ export async function decideNextInterviewerAction(
     const raw = await chat(
       {
         model: registryEntry.primary.model,
-        temperature: 0.4,
+        // Zero, not the message-generation 0.5 used below: this call decides accept vs.
+        // clarify, a binary classification, not prose. A CI run on a different host/backend
+        // (CPU vs. Metal) flipped this same "Fine." answer from clarify to accept at 0.4 --
+        // sampling variance near a decision boundary, not a config bug. Determinism here is
+        // a correctness property, not a style choice.
+        temperature: 0,
         timeoutMs: registryEntry.primary.timeoutMs,
         json: true,
         messages: [
