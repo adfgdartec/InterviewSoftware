@@ -2,6 +2,7 @@
 
 import { use, useEffect, useState, type ReactElement } from 'react';
 import { ScoreWithInterval } from '../../../components/ScoreWithInterval.js';
+import { VoiceAnswerButton } from '../../../components/VoiceAnswerButton.js';
 
 interface SessionView {
   readonly sessionId: string;
@@ -153,9 +154,12 @@ export default function SessionPage({ params }: { params: Promise<{ id: string }
               {error}
             </p>
           ) : null}
-          <button type="button" onClick={() => void submitAnswer()} disabled={submitting || answer.trim() === ''}>
-            {submitting ? 'Submitting…' : 'Submit answer'}
-          </button>
+          <div className="answer-controls">
+            <button type="button" onClick={() => void submitAnswer()} disabled={submitting || answer.trim() === ''}>
+              {submitting ? 'Submitting…' : 'Submit answer'}
+            </button>
+            <VoiceAnswerButton disabled={submitting} onTranscribed={(t) => setAnswer(t)} />
+          </div>
         </section>
       ) : null}
 
