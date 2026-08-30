@@ -54,6 +54,27 @@ jobs:
       - name: typecheck
         run: pnpm run typecheck
 
+      # apps/web/test/interviewer.test.ts and interviewer-route.e2e.test.ts talk to a real
+      # Ollama model rather than mocking one, deliberately -- same "fail, don't silently skip"
+      # principle as the sandbox escape suite below, so a green run actually proves the
+      # interviewer works. packages/providers/src/registry.ts's `interviewer_turn` purpose is
+      # the only one these two files exercise, so only that one model (not the larger grading
+      # model) needs to be present here.
+      - name: cache ollama models
+        uses: actions/cache@v4
+        with:
+          path: ~/.ollama/models
+          key: ollama-models-llama3.2-latest-v1
+      - name: install ollama and pull llama3.2:latest
+        run: |
+          curl -fsSL https://ollama.com/install.sh | sh
+          ollama serve &
+          for i in $(seq 1 60); do
+            curl -sf http://127.0.0.1:11434/api/version >/dev/null 2>&1 && break
+            sleep 1
+          done
+          ollama pull llama3.2:latest
+
       # Spec §3.5 unit + contract + integration layers. Excludes @loopcraft/sandbox: its
       # escape suite requires macOS Seatbelt and is designed to FAIL (not skip) without it --
       # exactly what happened here before this exclusion existed. That suite already has its
