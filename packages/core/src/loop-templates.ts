@@ -11,10 +11,11 @@
  * specific pages rot; these are the stable roots, which is the honest citation to make.
  */
 
+import { BRAND } from './brand.js';
 import type { LoopTemplate, RoundSpec } from './catalog-types.js';
 
 const DISCLAIMER =
-  'Modeled on publicly reported interview formats. Loopcraft is not affiliated with, ' +
+  `Modeled on publicly reported interview formats. ${BRAND.name} is not affiliated with, ` +
   'endorsed by, or sponsored by any employer named here.';
 
 const round = (

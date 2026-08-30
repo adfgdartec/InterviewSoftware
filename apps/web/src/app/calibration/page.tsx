@@ -1,4 +1,5 @@
 import type { ReactElement } from 'react';
+import { BRAND } from '@loopcraft/core';
 
 /**
  * The public calibration card (spec §2.6, §7 acceptance criterion 7). This page is the
@@ -8,7 +9,7 @@ import type { ReactElement } from 'react';
 export default function CalibrationPage(): ReactElement {
   return (
     <>
-      <h1>How Loopcraft scores work</h1>
+      <h1>How {BRAND.name} scores work</h1>
 
       <section aria-labelledby="status-heading" className="callout">
         <h2 id="status-heading">Reliability has not been measured yet</h2>
@@ -23,7 +24,7 @@ export default function CalibrationPage(): ReactElement {
         <h2 id="what-heading">What a score is</h2>
         <p>
           A score is a coaching signal. It is not a prediction of a hiring outcome, and
-          Loopcraft does not estimate anyone&rsquo;s chance of receiving an offer.
+          {BRAND.name} does not estimate anyone&rsquo;s chance of receiving an offer.
         </p>
         <p>
           Every dimension is scored 1&ndash;5 against a written behavioural anchor with two
@@ -62,7 +63,7 @@ export default function CalibrationPage(): ReactElement {
           density, quantification density, and STAR segment coverage.
         </p>
         <p>
-          Loopcraft never infers emotion, sentiment, engagement, enthusiasm, mood or
+          {BRAND.name} never infers emotion, sentiment, engagement, enthusiasm, mood or
           personality from your face, your voice, or video. This is enforced by a rule that
           fails our build, not by policy alone.
         </p>
