@@ -33,3 +33,6 @@ test-results/
 .pgdata/
 .playwright-mcp/
 apps/web/.env.local
+
+# Supabase CLI link state (local, machine-specific)
+supabase/.temp/

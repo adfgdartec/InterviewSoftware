@@ -29,5 +29,6 @@ export async function buildRouteDeps(): Promise<RouteDeps> {
     costCeilingCents: 500,
     generationTimeoutMs: 8_000,
     graderSampler: heuristicGraderSampler(),
+    interviewerEnabled: true,
   };
 }

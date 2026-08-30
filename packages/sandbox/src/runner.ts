@@ -152,7 +152,10 @@ export async function runInSandbox(code: string, options: RunOptions = {}): Prom
       // relative file lands in the one place it is allowed to write. Without this the only
       // writable path would be undiscoverable from inside the sandbox.
       cwd: scratch,
-      env: { PATH: '/usr/bin:/bin', HOME: scratch, TMPDIR: scratch },
+      // NODE_ENV is present only to satisfy @types/node's ProcessEnv shape when this file is
+      // typechecked from a consumer with a different @types/node resolution (apps/web); it
+      // has no effect on the confined process, which is Python, not Node.
+      env: { PATH: '/usr/bin:/bin', HOME: scratch, TMPDIR: scratch, NODE_ENV: process.env['NODE_ENV'] ?? 'development' },
     });
 
     let stdout = '';

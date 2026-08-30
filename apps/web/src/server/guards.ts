@@ -175,6 +175,14 @@ export interface ErrorBody {
  * path, no provider payload, no stack. The audited prototype returned all three.
  */
 export function toErrorResponse(error: unknown, errorId: string): { status: number; body: ErrorBody } {
+  // The response body deliberately never carries internal detail (this is what audit
+  // defect 5/12 was about), which means server-side logging is the ONLY place an operator
+  // can ever see what actually went wrong. Logging here, once, is what makes that true for
+  // every route instead of each handler having to remember to do it.
+  if (!(error instanceof UnauthorizedError) && !(error instanceof ValidationError)) {
+    console.error(`[${errorId}]`, error);
+  }
+
   if (error instanceof UnauthorizedError) {
     return { status: 401, body: { error: error.message, code: 'unauthorized', errorId } };
   }

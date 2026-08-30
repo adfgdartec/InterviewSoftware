@@ -23,6 +23,8 @@ export interface SessionRow {
   readonly currentRoundPosition: number;
 }
 
+export type HintRungName = 'nudge' | 'constraint' | 'structure' | 'partial_solution';
+
 export interface RoundRow {
   readonly id: string;
   readonly position: number;
@@ -31,6 +33,7 @@ export interface RoundRow {
   readonly persona: string;
   readonly minutes: number;
   readonly status: 'pending' | 'in_progress' | 'completed' | 'skipped';
+  readonly currentHintRung: HintRungName | null;
 }
 
 export interface TurnRow {
@@ -133,7 +136,7 @@ export async function loadSession(tx: TransactionSql, sessionId: string): Promis
   };
 
   const roundRows = await tx<Record<string, unknown>[]>`
-    select id, position, round_type, rubric_id, persona, minutes, status
+    select id, position, round_type, rubric_id, persona, minutes, status, current_hint_rung
     from rounds where session_id = ${sessionId} order by position asc`;
   const rounds: RoundRow[] = roundRows.map((r) => ({
     id: String(r['id']),
@@ -143,6 +146,7 @@ export async function loadSession(tx: TransactionSql, sessionId: string): Promis
     persona: String(r['persona']),
     minutes: Number(r['minutes']),
     status: String(r['status']) as RoundRow['status'],
+    currentHintRung: r['current_hint_rung'] === null ? null : (r['current_hint_rung'] as HintRungName),
   }));
 
   const turnRows = await tx<Record<string, unknown>[]>`
@@ -205,6 +209,15 @@ export async function recordQuestion(
     values (${state.session.orgId}, ${roundId}, ${itemId}, ${nextPosition}, ${question})`;
 
   return loadSession(tx, sessionId);
+}
+
+/** Records the interviewer's hint-ladder progress for a round. Never called with a client value. */
+export async function setRoundHintRung(
+  tx: TransactionSql,
+  roundId: string,
+  rung: HintRungName,
+): Promise<void> {
+  await tx`update rounds set current_hint_rung = ${rung} where id = ${roundId}`;
 }
 
 /**

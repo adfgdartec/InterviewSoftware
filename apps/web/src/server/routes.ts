@@ -9,9 +9,13 @@ import {
   createSession,
   loadSession,
   recordQuestion,
+  setRoundHintRung,
   submitAnswer,
+  type HintRungName,
   type SessionState,
 } from './session-engine.js';
+import { rubricById } from '@loopcraft/core';
+import { MAX_TURNS_PER_ROUND, decideNextInterviewerAction } from './interviewer.js';
 import { selectQuestion, type ItemSource, type QuestionGenerator } from './question-generation.js';
 import { gradeSession, loadDebrief } from './grading-service.js';
 import type { GraderSampler } from '@loopcraft/scoring';
@@ -41,6 +45,13 @@ export interface RouteDeps extends GuardPorts {
   readonly costCeilingCents: number;
   readonly generationTimeoutMs: number;
   readonly graderSampler: GraderSampler | null;
+  /**
+   * When true, postTurn runs the real conversational interviewer (spec §2.2): after each
+   * answer, a live model decides whether to clarify, hint, or accept before the round
+   * advances. Defaults to false/undefined so every pre-existing test keeps its single-turn
+   * behaviour without needing Ollama running; deps.ts sets this true for real product use.
+   */
+  readonly interviewerEnabled?: boolean;
 }
 
 /** The client-facing projection of a session. Storage keys and item ids never cross it. */
@@ -208,13 +219,52 @@ export async function postTurn(
     });
 
     const view = await asUser(deps.sql, user.userId, async (tx) => {
+      const before = await loadSession(tx, sessionId);
+      const roundBefore = before.currentRound;
+
+      // The real back-and-forth (spec §2.2). A live interviewer decides, from the answer just
+      // submitted plus every prior answer in this round, whether to advance the round or keep
+      // probing -- computed as a variable turnsPerRound for THIS call, so submitAnswer's
+      // existing count-based advance logic is reused rather than duplicated.
+      let effectiveTurnsPerRound = deps.turnsPerRound;
+      let followUp: { message: string; hintRung: HintRungName | null } | null = null;
+
+      if (deps.interviewerEnabled === true && roundBefore !== null) {
+        const rubric = rubricById(roundBefore.rubricId);
+        if (rubric !== undefined) {
+          const priorAnswers = before.turns
+            .filter((t) => t.roundId === roundBefore.id && t.answeredAt !== null)
+            .sort((a, b) => a.position - b.position)
+            .map((t) => t.transcript ?? '');
+          const decision = await decideNextInterviewerAction(rubric, {
+            question: before.pendingTurn?.question ?? '',
+            priorAnswers: [...priorAnswers, body.transcript],
+            currentHintRung: roundBefore.currentHintRung,
+            turnsSoFar: priorAnswers.length + 1,
+            maxTurns: MAX_TURNS_PER_ROUND,
+          });
+          if (decision.action === 'accept') {
+            effectiveTurnsPerRound = priorAnswers.length + 1;
+          } else {
+            effectiveTurnsPerRound = priorAnswers.length + 2;
+            followUp = { message: decision.message, hintRung: decision.hintRung };
+          }
+        }
+      }
+
       const advanced = await submitAnswer(
         tx,
         sessionId,
         body.turnId,
         body.transcript,
-        deps.turnsPerRound,
+        effectiveTurnsPerRound,
       );
+
+      if (followUp !== null && roundBefore !== null && advanced.currentRound?.id === roundBefore.id) {
+        if (followUp.hintRung !== null) await setRoundHintRung(tx, roundBefore.id, followUp.hintRung);
+        return toView(await recordQuestion(tx, sessionId, followUp.message, null));
+      }
+
       const round = advanced.currentRound;
       if (advanced.session.status !== 'in_progress' || round === null) return toView(advanced);
 
