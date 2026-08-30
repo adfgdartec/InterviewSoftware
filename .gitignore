@@ -32,3 +32,4 @@ test-results/
 # Local Postgres cluster (native)
 .pgdata/
 .playwright-mcp/
+apps/web/.env.local

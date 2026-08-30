@@ -134,7 +134,10 @@ export async function guard<TSchema extends z.ZodTypeAny>(
   }
 
   // 5. validation
-  const raw: unknown = options.mutating ? await request.json().catch(() => null) : {};
+  // A missing or empty body falls back to {}, not null: a route whose schema requires no
+  // fields (postDebrief's z.object({})) must validate on a genuinely empty POST, and z's
+  // object schemas reject `null` outright regardless of what fields they require.
+  const raw: unknown = options.mutating ? await request.json().catch(() => ({})) : {};
   assertNoForbiddenFields(raw);
   const parsed = options.schema.safeParse(raw);
   if (!parsed.success) {

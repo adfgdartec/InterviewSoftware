@@ -1,5 +1,6 @@
 import type { ReactElement } from 'react';
 import { LOOP_TEMPLATES, TRACKS, trackById } from '@loopcraft/core';
+import { StartLoopButton } from '../components/StartLoopButton.js';
 
 /**
  * Prep surface. Templates are labelled as modelled on publicly reported formats, and the
@@ -39,6 +40,7 @@ export default function PrepPage(): ReactElement {
                     ))}
                   </ol>
                 </details>
+                <StartLoopButton loopTemplateId={template.id} levelBand={template.levelBand} />
                 <p className="template__sources">
                   Modelled on:{' '}
                   {template.sourceUrls.map((url, index) => (

@@ -13,13 +13,14 @@
     "typecheck": "turbo run typecheck",
     "test": "turbo run test --concurrency=1",
     "test:rls": "pnpm --filter @loopcraft/db test:rls",
-    "db:migrate": "pnpm --filter @loopcraft/db migrate",
+    "db:migrate": "DATABASE_URL=postgres://loopcraft:loopcraft_local_dev@localhost:54329/loopcraft pnpm --filter @loopcraft/db migrate",
     "db:init": "./scripts/pg.sh init",
     "db:start": "./scripts/pg.sh start",
     "db:stop": "./scripts/pg.sh stop",
     "db:status": "./scripts/pg.sh status",
     "dev:web": "pnpm --filter @loopcraft/web dev",
-    "dev:worker": "apps/worker/.venv/bin/uvicorn loopcraft_worker.app:app --app-dir apps/worker --port 8099"
+    "dev:worker": "apps/worker/.venv/bin/uvicorn loopcraft_worker.app:app --app-dir apps/worker --port 8099",
+    "db:seed": "DATABASE_URL=postgres://loopcraft:loopcraft_local_dev@localhost:54329/loopcraft pnpm --filter @loopcraft/db db:seed"
   },
   "devDependencies": {
     "turbo": "2.5.8",

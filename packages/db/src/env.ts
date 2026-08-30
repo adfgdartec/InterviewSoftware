@@ -5,8 +5,18 @@
  */
 const LOCAL_HOSTS = new Set(['localhost', '127.0.0.1', '::1', 'postgres']);
 
+/**
+ * Tests default to a SEPARATE database from the one the dev/demo server uses.
+ * packages/db/test/globalSetup.ts and every db-backed test suite call resetDatabase(),
+ * which drops and recreates the schema -- if that defaulted to the same database the app
+ * points at, running `pnpm test` while the dev server is up destroys whatever a live demo
+ * session was relying on. (It did, once, while building this: a mid-demo debrief 500'd
+ * because a test run had just wiped the catalog and the seeded plan out from under it.)
+ * The dev server opts INTO the real database explicitly via DATABASE_URL in
+ * apps/web/.env.local; tests get the safe default.
+ */
 export const DEFAULT_LOCAL_URL =
-  'postgres://loopcraft:loopcraft_local_dev@localhost:54329/loopcraft';
+  'postgres://loopcraft:loopcraft_local_dev@localhost:54329/loopcraft_test';
 
 /** Connection used by the migration runner and seeds: owns the tables, bypasses RLS. */
 export function ownerUrl(): string {

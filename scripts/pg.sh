@@ -23,10 +23,12 @@ case "${1:-}" in
     fi
     pg_ctl -D "$PGDATA" -o "-p $PGPORT -k /tmp" -l "$PGDATA/server.log" start >/dev/null
     until pg_isready -h 127.0.0.1 -p "$PGPORT" -U "$PGUSER" >/dev/null 2>&1; do sleep 0.3; done
-    psql -h 127.0.0.1 -p "$PGPORT" -U "$PGUSER" -d postgres -tc \
-      "select 1 from pg_database where datname='$PGDB'" | grep -q 1 || \
-      psql -h 127.0.0.1 -p "$PGPORT" -U "$PGUSER" -d postgres -c "create database $PGDB" >/dev/null
-    echo "postgres up on $PGPORT, database $PGDB"
+    for db in "$PGDB" "${PGDB}_test"; do
+      psql -h 127.0.0.1 -p "$PGPORT" -U "$PGUSER" -d postgres -tc \
+        "select 1 from pg_database where datname='$db'" | grep -q 1 || \
+        psql -h 127.0.0.1 -p "$PGPORT" -U "$PGUSER" -d postgres -c "create database $db" >/dev/null
+    done
+    echo "postgres up on $PGPORT, databases $PGDB and ${PGDB}_test"
     ;;
   stop)
     pg_ctl -D "$PGDATA" stop >/dev/null 2>&1 || true

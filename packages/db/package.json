@@ -13,7 +13,8 @@
     "migrate": "tsx src/migrate.ts",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "test:rls": "vitest run test/rls.test.ts"
+    "test:rls": "vitest run test/rls.test.ts",
+    "db:seed": "tsx src/seed-dev-run.ts"
   },
   "dependencies": {
     "@loopcraft/core": "workspace:*",

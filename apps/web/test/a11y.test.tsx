@@ -1,4 +1,12 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
+
+// PrepPage now renders a client component (StartLoopButton) that calls useRouter(). Static
+// rendering here has no mounted Next app router to provide it -- the live app does (proven
+// by an actual browser click-through of the start flow); this stub is only so the a11y
+// audit can render the page shape at all.
+vi.mock('next/navigation', () => ({
+  useRouter: () => ({ push: () => {}, replace: () => {}, back: () => {}, refresh: () => {} }),
+}));
 import { renderToStaticMarkup } from 'react-dom/server';
 import { JSDOM } from 'jsdom';
 import axe from 'axe-core';
