@@ -12,13 +12,23 @@ concurrency:
 jobs:
   node:
     runs-on: ubuntu-latest
-    env:
-      DATABASE_URL: postgres://loopcraft:loopcraft_local_dev@localhost:54329/loopcraft
     steps:
       - uses: actions/checkout@v4
 
       # Loopcraft does not use Docker. Postgres runs as a native cluster; the code sandbox
       # is macOS Seatbelt, which is why the sandbox job below runs on macOS.
+      #
+      # No DATABASE_URL is set for this job. Every db-backed test suite defaults to
+      # `loopcraft_test` (packages/db/src/env.ts's DEFAULT_LOCAL_URL) precisely so a test run
+      # can never collide with a real dev/demo database -- CI has no dev server to protect,
+      # but using the same default here that a contributor's machine uses is what makes
+      # "it passed locally" and "it passed in CI" mean the same thing. Turborepo's strict env
+      # mode strips undeclared env vars from task processes (see turbo.json's `test` task),
+      # so a job-level DATABASE_URL override here would silently be dropped by `turbo run
+      # test` anyway -- this job previously set one pointing at `loopcraft`, which the test
+      # task never actually saw, while the setup step below only ever created `loopcraft`,
+      # not the `loopcraft_test` every test suite actually connects to. That mismatch is
+      # exactly what broke this job.
       - name: start native postgres
         run: |
           sudo apt-get update && sudo apt-get install -y postgresql-16
@@ -26,7 +36,7 @@ jobs:
           initdb -D "$PWD/.pgdata" -U loopcraft --auth=trust
           pg_ctl -D "$PWD/.pgdata" -o "-p 54329 -k /tmp" -l "$PWD/.pgdata/server.log" start
           until pg_isready -h 127.0.0.1 -p 54329 -U loopcraft; do sleep 1; done
-          psql -h 127.0.0.1 -p 54329 -U loopcraft -d postgres -c 'create database loopcraft'
+          psql -h 127.0.0.1 -p 54329 -U loopcraft -d postgres -c 'create database loopcraft_test'
 
       - uses: pnpm/action-setup@v4
         with:
@@ -69,6 +79,13 @@ jobs:
           node-version-file: .nvmrc
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      # packages/sandbox/src/limits.ts hardcodes PYTHON_BINARY at the standard Homebrew path
+      # for the confined interpreter (matching local dev setup); `actions/setup-python` does
+      # not install there, so the sandboxed process failed with execvp() "No such file or
+      # directory" -- Seatbelt's `(allow process-exec)` only allows exec of a binary that
+      # actually exists, and the escape suite correctly reported that as a real failure
+      # rather than silently passing on a broken confinement target.
+      - run: brew install python@3.12
       - name: sandbox escape suite
         run: pnpm --filter @loopcraft/sandbox test
 
