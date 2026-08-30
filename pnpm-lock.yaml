@@ -47,6 +47,9 @@ importers:
       '@loopcraft/providers':
         specifier: workspace:*
         version: link:../../packages/providers
+      '@loopcraft/sandbox':
+        specifier: workspace:*
+        version: link:../../packages/sandbox
       '@loopcraft/scoring':
         specifier: workspace:*
         version: link:../../packages/scoring
