@@ -54,9 +54,12 @@ jobs:
       - name: typecheck
         run: pnpm run typecheck
 
-      # Spec §3.5 unit + contract + integration layers.
+      # Spec §3.5 unit + contract + integration layers. Excludes @loopcraft/sandbox: its
+      # escape suite requires macOS Seatbelt and is designed to FAIL (not skip) without it --
+      # exactly what happened here before this exclusion existed. That suite already has its
+      # own dedicated macOS runner below; running it again on ubuntu can only ever fail.
       - name: unit and integration tests
-        run: pnpm run test
+        run: pnpm exec turbo run test --concurrency=1 --filter='!@loopcraft/sandbox'
 
       # Acceptance criterion 6, called out separately so a failure is unmissable in the log.
       - name: RLS cross-tenant denial

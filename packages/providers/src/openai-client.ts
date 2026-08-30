@@ -1,4 +1,5 @@
 import { CallCoalescer, SemanticCache, gatedCall, type Embedder } from './local-brain.js';
+import { hasCredential, MissingCredentialError, readCredential } from './secrets.js';
 
 /**
  * The OpenAI fallback tier (packages/providers/src/registry.ts: used when the local model is
@@ -30,9 +31,12 @@ export class OpenAIRequestError extends Error {
 }
 
 function apiKey(): string {
-  const key = process.env['OPENAI_API_KEY'];
-  if (key === undefined || key === '') throw new OpenAIKeyMissingError();
-  return key;
+  try {
+    return readCredential('OPENAI_API_KEY');
+  } catch (error) {
+    if (error instanceof MissingCredentialError) throw new OpenAIKeyMissingError();
+    throw error;
+  }
 }
 
 const OPENAI_BASE = process.env['OPENAI_BASE_URL'] ?? 'https://api.openai.com/v1';
@@ -122,5 +126,5 @@ export async function chat(options: OpenAIChatOptions, cacheable: boolean): Prom
 }
 
 export function openaiConfigured(): boolean {
-  return process.env['OPENAI_API_KEY'] !== undefined && process.env['OPENAI_API_KEY'] !== '';
+  return hasCredential('OPENAI_API_KEY');
 }

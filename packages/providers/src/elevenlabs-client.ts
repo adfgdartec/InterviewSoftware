@@ -1,3 +1,5 @@
+import { hasCredential, MissingCredentialError, readCredential } from './secrets.js';
+
 /**
  * Real ElevenLabs TTS integration. UNTESTED against the live API -- no ELEVENLABS_API_KEY
  * exists in this environment. Real code against ElevenLabs' documented text-to-speech
@@ -22,9 +24,12 @@ export class ElevenLabsRequestError extends Error {
 }
 
 function apiKey(): string {
-  const key = process.env['ELEVENLABS_API_KEY'];
-  if (key === undefined || key === '') throw new ElevenLabsKeyMissingError();
-  return key;
+  try {
+    return readCredential('ELEVENLABS_API_KEY');
+  } catch (error) {
+    if (error instanceof MissingCredentialError) throw new ElevenLabsKeyMissingError();
+    throw error;
+  }
 }
 
 const ELEVENLABS_BASE = process.env['ELEVENLABS_BASE_URL'] ?? 'https://api.elevenlabs.io/v1';
@@ -65,5 +70,5 @@ export async function synthesize(
 }
 
 export function elevenlabsConfigured(): boolean {
-  return process.env['ELEVENLABS_API_KEY'] !== undefined && process.env['ELEVENLABS_API_KEY'] !== '';
+  return hasCredential('ELEVENLABS_API_KEY');
 }

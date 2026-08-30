@@ -94,7 +94,7 @@ function bootstrapSource(code: string, stdin: string, limits: SandboxLimits): st
     '            sys.stderr.flush()',
     '            os._exit(137)',
     '        _t = threading.Event()',
-    '        _t.wait(0.01)',
+    '        _t.wait(0.004)',
     '',
     '_lc_guard = threading.Thread(target=_lc_mem_guard, daemon=True)',
     '_lc_guard.start()',

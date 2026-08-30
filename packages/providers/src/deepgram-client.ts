@@ -1,3 +1,5 @@
+import { hasCredential, MissingCredentialError, readCredential } from './secrets.js';
+
 /**
  * Real Deepgram STT integration. UNTESTED against the live API -- no DEEPGRAM_API_KEY exists
  * in this environment. Every function here is production code, not a stub: it sends real
@@ -28,9 +30,12 @@ export class DeepgramRequestError extends Error {
 }
 
 function apiKey(): string {
-  const key = process.env['DEEPGRAM_API_KEY'];
-  if (key === undefined || key === '') throw new DeepgramKeyMissingError();
-  return key;
+  try {
+    return readCredential('DEEPGRAM_API_KEY');
+  } catch (error) {
+    if (error instanceof MissingCredentialError) throw new DeepgramKeyMissingError();
+    throw error;
+  }
 }
 
 const DEEPGRAM_BASE = process.env['DEEPGRAM_BASE_URL'] ?? 'https://api.deepgram.com/v1';
@@ -108,5 +113,5 @@ export async function transcribe(
 }
 
 export function deepgramConfigured(): boolean {
-  return process.env['DEEPGRAM_API_KEY'] !== undefined && process.env['DEEPGRAM_API_KEY'] !== '';
+  return hasCredential('DEEPGRAM_API_KEY');
 }

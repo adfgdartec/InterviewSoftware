@@ -35,7 +35,13 @@ export interface SandboxLimits {
 export const DEFAULT_LIMITS: SandboxLimits = {
   memoryBytes: 256 * 1024 * 1024,
   wallClockMs: 5_000,
-  cpuSeconds: 5,
+  // Deliberately above wallClockMs, not equal to it: the in-process SIGALRM is the primary
+  // kill for a hung submission, RLIMIT_CPU is only the kernel backstop for cases where signal
+  // delivery itself is blocked. Setting them to the same value made which one fired a race --
+  // under scheduling contention (a busy shared CI runner) the kernel's CPU accounting can win
+  // that race before the alarm is delivered, misreporting an ordinary timeout as CPU
+  // exhaustion.
+  cpuSeconds: 8,
   processes: 64,
   outputBytes: 64 * 1024,
   memoryPollMs: 100,

@@ -43,6 +43,18 @@ export function readCredential(variable: string): string {
 }
 
 /**
+ * Presence check for a credential, without throwing -- for a caller that wants to degrade
+ * gracefully (e.g. skip a live test suite) rather than treat an unset key as an error. Still
+ * routed through this one module: a caller checking `process.env[...]` directly for a key
+ * name is exactly what guardrail 6's no-client-secrets test forbids.
+ */
+export function hasCredential(variable: string): boolean {
+  if (!isServerRuntime()) return false;
+  const value = process.env[variable];
+  return value !== undefined && value !== '';
+}
+
+/**
  * Redacts anything that looks like a credential from a string bound for a client response.
  * The audited prototype returned masked key suffixes in debug fields; masking is not
  * redaction, so this replaces the whole token rather than preserving its tail.
