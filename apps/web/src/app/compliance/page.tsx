@@ -9,30 +9,34 @@ import { BRAND } from '@loopcraft/core';
 export default function CompliancePage(): ReactElement {
   return (
     <>
-      <h1>Compliance position</h1>
-      <p>
+      <h1 className="text-3xl font-bold text-plum-900">Compliance position</h1>
+      <p className="mt-3 max-w-[70ch] text-neutral-900">
         {BRAND.name} is rehearsal software sold to candidates. It is not a hiring tool, it is
         not sold to employers for candidate evaluation, and it never supplies answers during a
         real interview.
       </p>
 
-      <section aria-labelledby="emotion-heading">
-        <h2 id="emotion-heading">Emotion inference</h2>
-        <p>
+      <section aria-labelledby="emotion-heading" className="mt-8 max-w-[70ch]">
+        <h2 id="emotion-heading" className="text-xl font-semibold text-plum-900">
+          Emotion inference
+        </h2>
+        <p className="mt-2 text-neutral-900">
           The EU AI Act prohibits inferring emotions of a natural person in workplace and
           educational contexts, and the Commission reads &ldquo;workplace&rdquo; broadly enough
           to include recruitment. {BRAND.name} does not perform emotion inference anywhere.
           Delivery feedback is computed from transcript text and audio timing only.
         </p>
-        <p>
+        <p className="mt-3 text-neutral-900">
           Video is optional, off by default, produces only mechanical framing advice, and is
           disabled entirely for users in the EU and Illinois.
         </p>
       </section>
 
-      <section aria-labelledby="biometric-heading">
-        <h2 id="biometric-heading">Biometric and privacy law</h2>
-        <ul>
+      <section aria-labelledby="biometric-heading" className="mt-8 max-w-[70ch]">
+        <h2 id="biometric-heading" className="text-xl font-semibold text-plum-900">
+          Biometric and privacy law
+        </h2>
+        <ul className="mt-3 list-disc space-y-2 pl-5 text-neutral-900">
           <li>
             <strong>Illinois BIPA.</strong> No face geometry or biometric template is
             generated at any point, so no biometric identifier is collected.
@@ -57,40 +61,46 @@ export default function CompliancePage(): ReactElement {
         </ul>
       </section>
 
-      <section aria-labelledby="employment-heading">
-        <h2 id="employment-heading">Employment-AI laws we do not trigger</h2>
-        <p>
+      <section aria-labelledby="employment-heading" className="mt-8 max-w-[70ch]">
+        <h2 id="employment-heading" className="text-xl font-semibold text-plum-900">
+          Employment-AI laws we do not trigger
+        </h2>
+        <p className="mt-2 text-neutral-900">
           Colorado SB 26-189, NYC Local Law 144 and Illinois HB 3773 bind developers and
-          deployers of systems used to make consequential employment decisions. {BRAND.name}
+          deployers of systems used to make consequential employment decisions. {BRAND.name}{' '}
           makes no selection decision: a candidate buys it for themselves, and its output is
           never sold to an employer. We preserve that distinction deliberately, because it is
           what keeps the product outside the high-risk classification.
         </p>
       </section>
 
-      <section aria-labelledby="claims-heading">
-        <h2 id="claims-heading">What we will not claim</h2>
-        <p>
+      <section aria-labelledby="claims-heading" className="mt-8 max-w-[70ch]">
+        <h2 id="claims-heading" className="text-xl font-semibold text-plum-900">
+          What we will not claim
+        </h2>
+        <p className="mt-2 text-neutral-900">
           We make no claim about your chance of being hired, no guarantee of any offer, and no
           success rate. We have run no efficacy study, so we assert no efficacy. If we ever
           run one it will be preregistered, with the denominator defined before data
           collection, and published with its methodology.
         </p>
-        <p>
+        <p className="mt-3 text-neutral-900">
           We do not use scraped or leaked question banks. Every item is generated against a
           published rubric and records its provenance.
         </p>
       </section>
 
-      <section aria-labelledby="a11y-heading">
-        <h2 id="a11y-heading">Accessibility</h2>
-        <p>
+      <section aria-labelledby="a11y-heading" className="mt-8 max-w-[70ch]">
+        <h2 id="a11y-heading" className="text-xl font-semibold text-plum-900">
+          Accessibility
+        </h2>
+        <p className="mt-2 text-neutral-900">
           We target WCAG 2.2 AA: full keyboard operation, captions on generated audio, a
           text-only interview mode, and configurable time limits.
         </p>
       </section>
 
-      <p>{BRAND.affiliationDisclaimer}</p>
+      <p className="mt-10 max-w-[70ch] text-sm text-neutral-600">{BRAND.affiliationDisclaimer}</p>
     </>
   );
 }
