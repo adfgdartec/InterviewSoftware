@@ -165,7 +165,9 @@ describe('score components (acceptance criterion 8)', () => {
     expect(html).toContain('3.4 ± 0.6');
     expect(html).toContain('/calibration');
     // The number and the interval are inside one element, so no layout can separate them.
-    expect(html).toMatch(/<span class="score__value">3\.4 ± 0\.6<\/span>/);
+    // Attribute-agnostic on purpose: the guarantee is co-location in one span, not a specific
+    // class name or the absence of styling attributes.
+    expect(html).toMatch(/<span[^>]*>3\.4 ± 0\.6<\/span>/);
   });
 
   it('never renders a bare integer', () => {
@@ -192,7 +194,8 @@ describe('score components (acceptance criterion 8)', () => {
       />,
     );
     expect(html).toContain('I would shard the optimizer state first');
-    expect(html).toContain('<blockquote>');
+    // Attribute-agnostic for the same reason as the score-value assertion above.
+    expect(html).toMatch(/<blockquote[^>]*>/);
   });
 
   it('omits the evidence block entirely rather than rendering an empty quote', () => {
