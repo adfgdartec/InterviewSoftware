@@ -41,12 +41,17 @@ export function StartLoopButton({ loopTemplateId, levelBand }: StartLoopButtonPr
   }
 
   return (
-    <div className="start-control">
-      <button type="button" onClick={() => void start()} disabled={pending} className="start-button">
+    <div className="mt-4">
+      <button
+        type="button"
+        onClick={() => void start()}
+        disabled={pending}
+        className="w-full rounded-md bg-plum-700 px-4 py-2 text-sm font-semibold text-white transition hover:bg-plum-900 disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto"
+      >
         {pending ? 'Starting…' : 'Start this loop'}
       </button>
       {error !== null ? (
-        <p role="alert" className="start-error">
+        <p role="alert" className="mt-2 text-sm font-medium text-danger">
           {error}
         </p>
       ) : null}
