@@ -25,11 +25,14 @@
     "@loopcraft/sandbox": "workspace:*"
   },
   "devDependencies": {
+    "@tailwindcss/postcss": "4.3.3",
     "@types/jsdom": "21.1.7",
     "@types/react": "19.1.13",
     "@types/react-dom": "19.1.9",
     "axe-core": "4.10.2",
     "jsdom": "25.0.1",
+    "postcss": "8.5.26",
+    "tailwindcss": "4.3.3",
     "typescript": "5.9.3",
     "vitest": "3.2.4"
   }

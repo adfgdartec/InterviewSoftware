@@ -1,0 +1,50 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: var(--font-plus-jakarta), system-ui, -apple-system, sans-serif;
+
+  --color-plum-900: #3b1236;
+  --color-plum-700: #6b2c64;
+  --color-plum-100: #f3e8f1;
+
+  --color-gold-600: #c9a227;
+  --color-gold-100: #fbf3d9;
+
+  --color-neutral-900: #2a2229;
+  --color-neutral-600: #6b6169;
+  --color-neutral-200: #e8e1e6;
+  --color-neutral-50: #faf7f9;
+
+  --color-success: #2e7d4f;
+  --color-warning: #b5790a;
+  --color-danger: #b0392b;
+}
+
+body {
+  font-family: var(--font-sans);
+}
+
+h1,
+h2,
+h3 {
+  text-wrap: balance;
+}
+
+/*
+ * The skip-link test stub in apps/web/test/a11y.test.tsx injects its own equivalent style
+ * (SKIP_LINK_STYLE) because that suite never imports layout.tsx or this stylesheet -- the two
+ * are intentionally decoupled, so this rule only has to be correct for the real browser.
+ */
+.skip-link {
+  position: absolute;
+  left: -9999px;
+}
+.skip-link:focus {
+  left: 0.5rem;
+  top: 0.5rem;
+  z-index: 50;
+  border-radius: 0.375rem;
+  background: var(--color-plum-900);
+  padding: 0.5rem 1rem;
+  color: white;
+}
