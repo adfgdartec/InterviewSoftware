@@ -7,11 +7,18 @@ import { CallCoalescer, SemanticCache, OllamaEmbedder, gatedCall, type Embedder 
  * callers anywhere in the product.
  */
 
-const OLLAMA_HOST = process.env['OLLAMA_HOST'] ?? 'http://127.0.0.1:11434';
+// A function, not a load-time constant: a caller (or a test) that sets OLLAMA_HOST after
+// this module has already been imported must still be honoured. A top-level `const` here
+// would freeze whatever the env var was at first import, silently ignoring every later
+// change -- which is exactly what let a test claiming to point at an unreachable host
+// actually keep hitting the real one.
+function ollamaHost(): string {
+  return process.env['OLLAMA_HOST'] ?? 'http://127.0.0.1:11434';
+}
 
 export class OllamaUnavailableError extends Error {
   constructor(cause: unknown) {
-    super(`Could not reach Ollama at ${OLLAMA_HOST}. Is \`ollama serve\` running?`);
+    super(`Could not reach Ollama at ${ollamaHost()}. Is \`ollama serve\` running?`);
     this.name = 'OllamaUnavailableError';
     this.cause = cause;
   }
@@ -35,7 +42,7 @@ async function rawChat(options: ChatOptions): Promise<string> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), options.timeoutMs);
   try {
-    const res = await fetch(`${OLLAMA_HOST}/api/chat`, {
+    const res = await fetch(`${ollamaHost()}/api/chat`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       signal: controller.signal,
@@ -98,7 +105,7 @@ export async function chat(options: ChatOptions, cacheable: boolean): Promise<st
 /** Pings Ollama so a caller can fail fast with a clear message instead of a generic timeout. */
 export async function ollamaReachable(): Promise<boolean> {
   try {
-    const res = await fetch(`${OLLAMA_HOST}/api/version`, { signal: AbortSignal.timeout(2_000) });
+    const res = await fetch(`${ollamaHost()}/api/version`, { signal: AbortSignal.timeout(2_000) });
     return res.ok;
   } catch {
     return false;

@@ -103,6 +103,22 @@ export async function decideNextInterviewerAction(
   const latestAnswer = state.priorAnswers[state.priorAnswers.length - 1] ?? '';
   const lowEffort = latestAnswer.trim().length < 40;
 
+  // DECISION RULE step 1 in the prompt below is meant to be nearly mechanical ("a single
+  // vague sentence with no specific claim" -> clarify), yet a CI run on a different backend
+  // (CPU vs. Metal) still flipped an obvious case ("Fine.") to accept even at temperature 0 --
+  // greedy decoding is deterministic per-backend, not across backends, and a near-tied logit
+  // can land on either token depending on floating-point summation order. The candidate's
+  // very first reply in an exchange is exactly the case step 1 already describes in words;
+  // enforcing it here in code, without a model call, makes it a correctness guarantee instead
+  // of a per-backend probability.
+  if (lowEffort && state.priorAnswers.length === 1) {
+    return {
+      action: 'clarify',
+      message: 'Can you say more? I need a specific answer, not just a short response.',
+      hintRung: state.currentHintRung,
+    };
+  }
+
   try {
     const raw = await chat(
       {
