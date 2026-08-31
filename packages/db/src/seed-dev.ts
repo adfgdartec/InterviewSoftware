@@ -13,8 +13,9 @@ export async function seedDevPlan(sql: Sql): Promise<void> {
     insert into plans (id, name, price_cents, billing_period, included_sessions,
                        included_asr_minutes, allows_loop_simulation, allows_code_execution,
                        allows_video, auto_renews)
-    values (${DEV_PLAN_ID}, 'Demo', 0, 'free', 100, 400, true, false, false, false)
+    values (${DEV_PLAN_ID}, 'Demo', 0, 'free', 100, 400, true, false, true, false)
     on conflict (id) do update set
       included_sessions = excluded.included_sessions,
-      allows_loop_simulation = excluded.allows_loop_simulation`;
+      allows_loop_simulation = excluded.allows_loop_simulation,
+      allows_video = excluded.allows_video`;
 }
