@@ -20,6 +20,7 @@ import { selectQuestion, type ItemSource, type QuestionGenerator } from './quest
 import { gradeSession, loadDebrief } from './grading-service.js';
 import type { GraderSampler } from '@loopcraft/scoring';
 import type { LoopTemplate } from '@loopcraft/core';
+import { videoEligible } from './video-eligibility.js';
 
 /**
  * Route handlers, kept out of the App Router files so they are testable without a running
@@ -34,6 +35,13 @@ export const createSessionBody = z.object({
 export const submitTurnBody = z.object({
   turnId: z.string().uuid(),
   transcript: z.string().min(1).max(50_000),
+});
+
+export const patchUserProfileBody = z.object({
+  displayName: z.string().min(1).max(200).optional(),
+  jurisdiction: z.enum(['unknown', 'eu', 'illinois', 'us_other', 'other']).optional(),
+  ageBand: z.enum(['unknown', 'under_13', '13_to_15', '16_plus']).optional(),
+  videoOptIn: z.boolean().optional(),
 });
 
 export interface RouteDeps extends GuardPorts {
@@ -90,6 +98,36 @@ function json(status: number, body: unknown): Response {
     status,
     headers: { 'content-type': 'application/json' },
   });
+}
+
+export interface UserProfileView {
+  readonly displayName: string | null;
+  readonly jurisdiction: string;
+  readonly ageBand: string;
+  readonly videoOptIn: boolean;
+  readonly videoEligible: boolean;
+}
+
+interface UserRow {
+  readonly display_name: string | null;
+  readonly jurisdiction: string;
+  readonly age_band: string;
+  readonly video_opt_in: boolean;
+}
+
+function toProfileView(row: UserRow, planAllowsVideo: boolean): UserProfileView {
+  return {
+    displayName: row.display_name,
+    jurisdiction: row.jurisdiction,
+    ageBand: row.age_band,
+    videoOptIn: row.video_opt_in,
+    videoEligible: videoEligible({
+      jurisdiction: row.jurisdiction,
+      ageBand: row.age_band,
+      videoOptIn: row.video_opt_in,
+      planAllowsVideo,
+    }),
+  };
 }
 
 /** POST /api/sessions — creates a loop and issues its first question. */
@@ -166,6 +204,61 @@ export async function getSession(
     const view = await asUser(deps.sql, user.userId, async (tx) =>
       toView(await loadSession(tx, sessionId)));
     return json(200, view);
+  } catch (error) {
+    const { status, body } = toErrorResponse(error, errorId);
+    return json(status, body);
+  }
+}
+
+/** GET /api/users/me — the authenticated user's own profile, with computed video eligibility. */
+export async function getUserProfile(request: Request, deps: RouteDeps): Promise<Response> {
+  const errorId = randomUUID();
+  try {
+    const { user, entitlement } = await guard(request, deps, {
+      schema: z.object({}),
+      mutating: false,
+      rateLimitBucket: 'users.read',
+    });
+    const row = await asUser(deps.sql, user.userId, async (tx) => {
+      const rows = await tx<UserRow[]>`
+        select display_name, jurisdiction, age_band, video_opt_in
+        from users where id = ${user.userId}`;
+      return rows[0];
+    });
+    if (row === undefined) {
+      return json(404, { error: 'User not found.', code: 'not_found', errorId });
+    }
+    return json(200, toProfileView(row, entitlement.plan.allowsVideo));
+  } catch (error) {
+    const { status, body } = toErrorResponse(error, errorId);
+    return json(status, body);
+  }
+}
+
+/** PATCH /api/users/me — partial update; the response is always the post-update state. */
+export async function patchUserProfile(request: Request, deps: RouteDeps): Promise<Response> {
+  const errorId = randomUUID();
+  try {
+    const { user, entitlement, body } = await guard(request, deps, {
+      schema: patchUserProfileBody,
+      mutating: true,
+      rateLimitBucket: 'users.update',
+    });
+    const row = await asUser(deps.sql, user.userId, async (tx) => {
+      const rows = await tx<UserRow[]>`
+        update users set
+          display_name = coalesce(${body.displayName ?? null}, display_name),
+          jurisdiction = coalesce(${body.jurisdiction ?? null}, jurisdiction),
+          age_band = coalesce(${body.ageBand ?? null}, age_band),
+          video_opt_in = coalesce(${body.videoOptIn ?? null}, video_opt_in)
+        where id = ${user.userId}
+        returning display_name, jurisdiction, age_band, video_opt_in`;
+      return rows[0];
+    });
+    if (row === undefined) {
+      return json(404, { error: 'User not found.', code: 'not_found', errorId });
+    }
+    return json(200, toProfileView(row, entitlement.plan.allowsVideo));
   } catch (error) {
     const { status, body } = toErrorResponse(error, errorId);
     return json(status, body);

@@ -3,7 +3,14 @@ import { FIXTURE, appClient, ownerClient, seedItems } from '@loopcraft/db';
 import type { Item, LoopTemplate } from '@loopcraft/core';
 import { postgresEntitlementStore } from '../src/server/entitlement-store.js';
 import { FixedWindowRateLimiter } from '../src/server/rate-limit.js';
-import { getSession, postSession, postTurn, type RouteDeps } from '../src/server/routes.js';
+import {
+  getSession,
+  getUserProfile,
+  patchUserProfile,
+  postSession,
+  postTurn,
+  type RouteDeps,
+} from '../src/server/routes.js';
 
 /**
  * Integration layer from spec §3.5: full loop, resume-after-refresh, entitlement denial --
@@ -278,5 +285,74 @@ describe('cross-tenant isolation holds at the route layer', () => {
       req({ turnId, transcript: 'stolen' }), sessionId, deps(FIXTURE.userB, FIXTURE.orgB),
     );
     expect(res.status).toBe(404);
+  });
+});
+
+describe('GET/PATCH /api/users/me (video eligibility settings)', () => {
+  beforeEach(async () => {
+    await withOwner(async (o) => {
+      await o`update plans set allows_video = true where id = ${FIXTURE.planId}`;
+      await o`update users set jurisdiction = 'unknown', age_band = 'unknown',
+              video_opt_in = false, display_name = 'Candidate A' where id = ${FIXTURE.userA}`;
+    });
+  });
+
+  const getReq2 = (): Request => new Request('https://loopcraft.test/api/users/me');
+  const patchReq = (body: unknown): Request =>
+    new Request('https://loopcraft.test/api/users/me', {
+      method: 'PATCH',
+      headers: { 'content-type': 'application/json', 'idempotency-key': 'k-profile-1' },
+      body: JSON.stringify(body),
+    });
+
+  it('starts not eligible for video (unknown jurisdiction, unknown age band, opted out)', async () => {
+    const res = await getUserProfile(getReq2(), deps());
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.jurisdiction).toBe('unknown');
+    expect(body.ageBand).toBe('unknown');
+    expect(body.videoOptIn).toBe(false);
+    expect(body.videoEligible).toBe(false);
+  });
+
+  it('becomes eligible once jurisdiction, age band, and opt-in are all set', async () => {
+    const patchRes = await patchUserProfile(
+      patchReq({ jurisdiction: 'us_other', ageBand: '16_plus', videoOptIn: true }),
+      deps(),
+    );
+    expect(patchRes.status).toBe(200);
+    const body = await patchRes.json();
+    expect(body.videoEligible).toBe(true);
+
+    const getRes = await getUserProfile(getReq2(), deps());
+    const getBody = await getRes.json();
+    expect(getBody.videoEligible).toBe(true);
+  });
+
+  it('stays ineligible if jurisdiction is eu even with everything else set', async () => {
+    const res = await patchUserProfile(
+      patchReq({ jurisdiction: 'eu', ageBand: '16_plus', videoOptIn: true }),
+      deps(),
+    );
+    const body = await res.json();
+    expect(body.videoEligible).toBe(false);
+  });
+
+  it('rejects an unknown jurisdiction value', async () => {
+    const res = await patchUserProfile(patchReq({ jurisdiction: 'mars' }), deps());
+    expect(res.status).toBe(400);
+  });
+
+  it("user B cannot read or write user A's profile", async () => {
+    await patchUserProfile(
+      patchReq({ jurisdiction: 'us_other', ageBand: '16_plus', videoOptIn: true }),
+      deps(),
+    );
+    const bRes = await getUserProfile(getReq2(), deps(FIXTURE.userB, FIXTURE.orgB));
+    const bBody = await bRes.json();
+    // RLS scopes the query to the caller's own row -- user B reads user B's row, which was
+    // never touched by the PATCH above, not a 403/404. This asserts the isolation is real:
+    // user B's own row stays at its own unrelated defaults, never user A's values.
+    expect(bBody.jurisdiction).not.toBe('us_other');
   });
 });

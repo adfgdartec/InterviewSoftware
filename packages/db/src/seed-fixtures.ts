@@ -46,8 +46,8 @@ export async function seedTwoTenants(sql: Sql): Promise<void> {
   await sql`
     insert into plans (id, name, price_cents, billing_period, included_sessions,
                        included_asr_minutes, allows_loop_simulation, allows_code_execution,
-                       auto_renews)
-      values (${FIXTURE.planId}, 'Pro (monthly)', 4900, 'monthly', 8, 400, true, true, true)
+                       allows_video, auto_renews)
+      values (${FIXTURE.planId}, 'Pro (monthly)', 4900, 'monthly', 8, 400, true, true, true, true)
       on conflict (id) do nothing`;
 
   await sql`
