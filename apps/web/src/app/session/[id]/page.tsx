@@ -41,6 +41,9 @@ async function readJson<T>(res: Response): Promise<T> {
   return (await res.json()) as T;
 }
 
+const PRIMARY_BUTTON_CLASS =
+  'rounded-md bg-plum-700 px-4 py-2 text-sm font-semibold text-white transition hover:bg-plum-900 disabled:cursor-not-allowed disabled:opacity-60';
+
 /**
  * The actual loop-taking UI: shows the current question, takes an answer, submits it to the
  * real /turns route, and repeats until the loop is complete -- then fetches and renders the
@@ -115,47 +118,66 @@ export default function SessionPage({ params }: { params: Promise<{ id: string }
   if (error !== null && view === null) {
     return (
       <>
-        <h1>Something went wrong</h1>
-        <p role="alert">{error}</p>
-        <p>
-          <a href="/">Back to the loop list</a>
+        <h1 className="text-2xl font-bold text-plum-900">Something went wrong</h1>
+        <p role="alert" className="mt-2 text-sm font-medium text-danger">
+          {error}
+        </p>
+        <p className="mt-4">
+          <a href="/" className="font-medium text-plum-700 underline hover:text-plum-900">
+            Back to the loop list
+          </a>
         </p>
       </>
     );
   }
 
   if (view === null) {
-    return <p>Loading your session…</p>;
+    return <p className="text-neutral-600">Loading your session…</p>;
   }
 
   return (
     <>
-      <h1>{view.trackId} &middot; {view.levelBand}</h1>
-      <p className="session-progress">
+      <h1 className="text-2xl font-bold text-plum-900">
+        {view.trackId} &middot; {view.levelBand}
+      </h1>
+      <p className="mt-1 text-sm text-neutral-600">
         Round {view.currentRoundPosition} of {view.roundCount}
         {view.currentRoundType !== null ? ` — ${view.currentRoundType}` : ''}
         {view.persona !== null ? ` (${view.persona})` : ''}
       </p>
 
       {view.status === 'in_progress' && view.question !== null ? (
-        <section aria-labelledby="question-heading">
-          <h2 id="question-heading">Question</h2>
-          <p className="session-question">{view.question}</p>
-          <label htmlFor="answer">Your answer</label>
+        <section
+          aria-labelledby="question-heading"
+          className="mt-6 max-w-[65ch] rounded-lg border border-neutral-200 bg-white p-5 shadow-sm"
+        >
+          <h2 id="question-heading" className="text-lg font-semibold text-plum-900">
+            Question
+          </h2>
+          <p className="mt-2 text-neutral-900">{view.question}</p>
+          <label htmlFor="answer" className="mt-4 block text-sm font-medium text-neutral-900">
+            Your answer
+          </label>
           <textarea
             id="answer"
             value={answer}
             onChange={(e) => setAnswer(e.target.value)}
             rows={8}
             disabled={submitting}
+            className="mt-2 w-full rounded-md border border-neutral-200 p-3 text-sm text-neutral-900 focus:border-gold-600 focus:outline-none focus:ring-2 focus:ring-gold-600"
           />
           {error !== null ? (
-            <p role="alert" className="start-error">
+            <p role="alert" className="mt-2 text-sm font-medium text-danger">
               {error}
             </p>
           ) : null}
-          <div className="answer-controls">
-            <button type="button" onClick={() => void submitAnswer()} disabled={submitting || answer.trim() === ''}>
+          <div className="mt-4 flex flex-col gap-3 md:flex-row md:items-center">
+            <button
+              type="button"
+              onClick={() => void submitAnswer()}
+              disabled={submitting || answer.trim() === ''}
+              className={PRIMARY_BUTTON_CLASS}
+            >
               {submitting ? 'Submitting…' : 'Submit answer'}
             </button>
             <VoiceAnswerButton disabled={submitting} onTranscribed={(t) => setAnswer(t)} />
@@ -164,41 +186,54 @@ export default function SessionPage({ params }: { params: Promise<{ id: string }
       ) : null}
 
       {view.status === 'completed' && debrief === null ? (
-        <section>
-          <h2>Loop complete</h2>
-          <p>{view.answeredTurnCount} rounds answered.</p>
+        <section className="mt-6 rounded-lg border border-neutral-200 bg-white p-5 shadow-sm">
+          <h2 className="text-lg font-semibold text-plum-900">Loop complete</h2>
+          <p className="mt-2 text-sm text-neutral-600">{view.answeredTurnCount} rounds answered.</p>
           {gradingError !== null ? (
-            <p role="alert" className="start-error">
+            <p role="alert" className="mt-2 text-sm font-medium text-danger">
               {gradingError}
             </p>
           ) : null}
-          <button type="button" onClick={() => void fetchDebrief()} disabled={grading}>
+          <button
+            type="button"
+            onClick={() => void fetchDebrief()}
+            disabled={grading}
+            className={`mt-4 ${PRIMARY_BUTTON_CLASS}`}
+          >
             {grading ? 'Grading…' : 'Get your debrief'}
           </button>
         </section>
       ) : null}
 
       {debrief !== null ? (
-        <section aria-labelledby="debrief-heading">
-          <h2 id="debrief-heading">Debrief</h2>
-          <p>
-            Overall: <strong>{debrief.overallDisplay}</strong>
+        <section aria-labelledby="debrief-heading" className="mt-8">
+          <h2 id="debrief-heading" className="text-xl font-semibold text-plum-900">
+            Debrief
+          </h2>
+          <p className="mt-3 inline-block rounded-lg bg-gold-100 px-4 py-2">
+            <span className="text-sm text-neutral-600">Overall: </span>
+            <strong className="text-2xl font-bold text-plum-900">{debrief.overallDisplay}</strong>
           </p>
-          <p className="score__method">{debrief.methodNote}</p>
+          <p className="mt-2 text-sm text-neutral-600">{debrief.methodNote}</p>
 
           {debrief.practiceFocus.length > 0 ? (
             <>
-              <h3>Practice focus</h3>
-              <ul>
+              <h3 className="mt-6 text-lg font-semibold text-plum-900">Practice focus</h3>
+              <ul className="mt-2 flex flex-wrap gap-2">
                 {debrief.practiceFocus.map((a) => (
-                  <li key={a.dimension}>{a.name}</li>
+                  <li
+                    key={a.dimension}
+                    className="rounded-full bg-plum-100 px-3 py-1 text-sm font-medium text-plum-900"
+                  >
+                    {a.name}
+                  </li>
                 ))}
               </ul>
             </>
           ) : null}
 
-          <h3>Every dimension</h3>
-          <ul className="score-list">
+          <h3 className="mt-6 text-lg font-semibold text-plum-900">Every dimension</h3>
+          <ul className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
             {debrief.attributes.map((a) => (
               <li key={a.dimension}>
                 <ScoreWithInterval
@@ -214,7 +249,9 @@ export default function SessionPage({ params }: { params: Promise<{ id: string }
           </ul>
 
           {debrief.gaps.length > 0 ? (
-            <p className="session-gaps">No evidence collected for: {debrief.gaps.join(', ')}.</p>
+            <p className="mt-4 text-sm text-neutral-600">
+              No evidence collected for: {debrief.gaps.join(', ')}.
+            </p>
           ) : null}
         </section>
       ) : null}
