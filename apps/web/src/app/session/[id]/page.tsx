@@ -3,6 +3,7 @@
 import { use, useEffect, useState, type ReactElement } from 'react';
 import { ScoreWithInterval } from '../../../components/ScoreWithInterval.js';
 import { VoiceAnswerButton } from '../../../components/VoiceAnswerButton.js';
+import { CameraFramingCheck } from '../../../components/CameraFramingCheck.js';
 
 interface SessionView {
   readonly sessionId: string;
@@ -16,6 +17,7 @@ interface SessionView {
   readonly question: string | null;
   readonly pendingTurnId: string | null;
   readonly answeredTurnCount: number;
+  readonly videoEligible: boolean;
 }
 
 interface DebriefAttribute {
@@ -183,6 +185,12 @@ export default function SessionPage({ params }: { params: Promise<{ id: string }
             <VoiceAnswerButton disabled={submitting} onTranscribed={(t) => setAnswer(t)} />
           </div>
         </section>
+      ) : null}
+
+      {view.status === 'in_progress' && view.videoEligible ? (
+        <div className="max-w-[65ch]">
+          <CameraFramingCheck />
+        </div>
       ) : null}
 
       {view.status === 'completed' && debrief === null ? (

@@ -75,9 +75,17 @@ export interface SessionView {
   readonly question: string | null;
   readonly pendingTurnId: string | null;
   readonly answeredTurnCount: number;
+  readonly videoEligible: boolean;
 }
 
-export function toView(state: SessionState): SessionView {
+/**
+ * `videoEligible` defaults to false (fail-closed, not "unknown until proven otherwise") for
+ * every caller except `getSession`, which is the only one whose response the client actually
+ * reads this field from -- `postSession`/`postTurn`'s callers never consume it client-side,
+ * so threading the user row and entitlement through every `toView()` call site would add
+ * real complexity for a field nothing reads there.
+ */
+export function toView(state: SessionState, videoEligible = false): SessionView {
   return {
     sessionId: state.session.id,
     status: state.session.status,
@@ -90,6 +98,7 @@ export function toView(state: SessionState): SessionView {
     question: state.pendingTurn?.question ?? null,
     pendingTurnId: state.pendingTurn?.id ?? null,
     answeredTurnCount: state.answeredTurnCount,
+    videoEligible,
   };
 }
 
@@ -196,13 +205,27 @@ export async function getSession(
 ): Promise<Response> {
   const errorId = randomUUID();
   try {
-    const { user } = await guard(request, deps, {
+    const { user, entitlement } = await guard(request, deps, {
       schema: z.object({}),
       mutating: false,
       rateLimitBucket: 'sessions.read',
     });
-    const view = await asUser(deps.sql, user.userId, async (tx) =>
-      toView(await loadSession(tx, sessionId)));
+    const view = await asUser(deps.sql, user.userId, async (tx) => {
+      const state = await loadSession(tx, sessionId);
+      const rows = await tx<UserRow[]>`
+        select display_name, jurisdiction, age_band, video_opt_in
+        from users where id = ${user.userId}`;
+      const row = rows[0];
+      const eligible = row === undefined
+        ? false
+        : videoEligible({
+            jurisdiction: row.jurisdiction,
+            ageBand: row.age_band,
+            videoOptIn: row.video_opt_in,
+            planAllowsVideo: entitlement.plan.allowsVideo,
+          });
+      return toView(state, eligible);
+    });
     return json(200, view);
   } catch (error) {
     const { status, body } = toErrorResponse(error, errorId);

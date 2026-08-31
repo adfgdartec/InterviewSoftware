@@ -272,6 +272,32 @@ describe('the full loop, and resuming it', () => {
   });
 });
 
+describe('session view carries video eligibility', () => {
+  it('reflects the caller\'s current eligibility on the session view', async () => {
+    await withOwner(async (o) => {
+      await o`update plans set allows_video = true where id = ${FIXTURE.planId}`;
+      await o`update users set jurisdiction = 'us_other', age_band = '16_plus',
+              video_opt_in = true where id = ${FIXTURE.userA}`;
+    });
+    const { sessionId } = await startLoop(deps());
+    const res = await getSession(getReq(), sessionId, deps());
+    const body = await res.json();
+    expect(body.videoEligible).toBe(true);
+  });
+
+  it('is false when the caller has not opted in, even if otherwise eligible', async () => {
+    await withOwner(async (o) => {
+      await o`update plans set allows_video = true where id = ${FIXTURE.planId}`;
+      await o`update users set jurisdiction = 'us_other', age_band = '16_plus',
+              video_opt_in = false where id = ${FIXTURE.userA}`;
+    });
+    const { sessionId } = await startLoop(deps());
+    const res = await getSession(getReq(), sessionId, deps());
+    const body = await res.json();
+    expect(body.videoEligible).toBe(false);
+  });
+});
+
 describe('cross-tenant isolation holds at the route layer', () => {
   it("user B cannot read user A's session", async () => {
     const { sessionId } = await startLoop(deps());
