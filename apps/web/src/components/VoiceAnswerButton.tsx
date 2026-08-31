@@ -71,17 +71,23 @@ export function VoiceAnswerButton({ onTranscribed, disabled }: VoiceAnswerButton
     }
   }
 
+  const idleClass =
+    'inline-flex items-center gap-2 rounded-md border border-plum-700 px-4 py-2 text-sm font-semibold text-plum-700 transition hover:bg-plum-100 disabled:cursor-not-allowed disabled:opacity-60';
+  const recordingClass =
+    'inline-flex animate-pulse items-center gap-2 rounded-md bg-plum-700 px-4 py-2 text-sm font-semibold text-white motion-reduce:animate-none';
+
   return (
-    <div className="voice-control">
+    <div>
       <button
         type="button"
         onClick={() => (recording ? stopRecording() : void startRecording())}
         disabled={disabled === true || transcribing}
+        className={recording ? recordingClass : idleClass}
       >
         {transcribing ? 'Transcribing…' : recording ? 'Stop recording' : 'Answer by voice'}
       </button>
       {error !== null ? (
-        <p role="alert" className="start-error">
+        <p role="alert" className="mt-2 text-sm font-medium text-danger">
           {error}
         </p>
       ) : null}
