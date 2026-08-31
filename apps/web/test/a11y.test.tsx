@@ -16,6 +16,7 @@ import { findBannedTokensInText, findClaimViolations } from '@loopcraft/core';
 import PrepPage from '../src/app/page.js';
 import CalibrationPage from '../src/app/calibration/page.js';
 import CompliancePage from '../src/app/compliance/page.js';
+import SettingsPage from '../src/app/settings/page.js';
 import { Dashboard } from '../src/components/Dashboard.js';
 import { AbilityReadout, ScoreWithInterval } from '../src/components/ScoreWithInterval.js';
 
@@ -125,6 +126,7 @@ describe('primary routes have zero critical or serious axe violations', () => {
     ['prep', <PrepPage key="p" />],
     ['calibration', <CalibrationPage key="c" />],
     ['compliance', <CompliancePage key="x" />],
+    ['settings', <SettingsPage key="s" />],
     ['dashboard', SAMPLE_DASHBOARD],
   ])('%s', async (_name, element) => {
     const violations = await auditHtml(documentFor(element));
@@ -293,6 +295,7 @@ describe('the two pages exempt from the affect lint rule earn that exemption', (
     ['prep', <PrepPage key="p" />],
     ['compliance', <CompliancePage key="c" />],
     ['calibration', <CalibrationPage key="k" />],
+    ['settings', <SettingsPage key="s" />],
     ['dashboard', SAMPLE_DASHBOARD],
   ])('%s makes no banned marketing claim', (name, element) => {
     expect(findClaimViolations({ [name]: textOf(element) })).toEqual([]);

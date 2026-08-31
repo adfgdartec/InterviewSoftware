@@ -26,6 +26,7 @@ const NAV_LINKS = [
   { href: '/dashboard', label: 'Progress' },
   { href: '/calibration', label: 'How scoring works' },
   { href: '/compliance', label: 'Compliance' },
+  { href: '/settings', label: 'Settings' },
 ] as const;
 
 export default function RootLayout({ children }: { children: ReactNode }): ReactElement {
