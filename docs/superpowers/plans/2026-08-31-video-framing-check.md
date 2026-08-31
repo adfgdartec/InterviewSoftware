@@ -302,8 +302,8 @@ describe('framingVerdict (purely geometric, no ML inference)', () => {
   it('reports every failing check at once, not just the first', () => {
     const v = framingVerdict(
       {
-        boundingBox: { originX: 0, originY: 0, width: 450, height: 450 },
-        eyeKeypoints: [{ x: 10, y: 20 }, { x: 20, y: 20 }],
+        boundingBox: { originX: 500, originY: 0, width: 450, height: 450 },
+        eyeKeypoints: [{ x: 510, y: 20 }, { x: 520, y: 20 }],
       },
       FRAME,
     );
