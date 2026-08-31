@@ -17,6 +17,7 @@
     "@loopcraft/db": "workspace:*",
     "@loopcraft/providers": "workspace:*",
     "@loopcraft/scoring": "workspace:*",
+    "@mediapipe/tasks-vision": "1.0.1",
     "next": "15.5.4",
     "postgres": "3.4.7",
     "react": "19.1.1",
