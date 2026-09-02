@@ -48,22 +48,28 @@ export default function PrepPage(): ReactElement {
                     ))}
                   </ol>
                 </details>
-                <StartLoopButton loopTemplateId={template.id} levelBand={template.levelBand} />
-                <p className="mt-4 text-xs text-neutral-600">
-                  Modelled on:{' '}
-                  {template.sourceUrls.map((url, index) => (
-                    <span key={url}>
-                      {index > 0 ? ', ' : ''}
-                      <a
-                        href={url}
-                        rel="noreferrer noopener nofollow"
-                        className="underline hover:text-plum-700"
-                      >
-                        {new URL(url).hostname}
-                      </a>
-                    </span>
-                  ))}
-                </p>
+                {/* `mt-auto` is what makes the card's `flex flex-col` earn its place: the
+                    loop descriptions differ in length by several lines, so without it the
+                    start buttons and provenance lines sit at a different height in every
+                    card of a row. Pushing the whole action block down aligns them. */}
+                <div className="mt-auto">
+                  <StartLoopButton loopTemplateId={template.id} levelBand={template.levelBand} />
+                  <p className="mt-4 text-xs text-neutral-600">
+                    Modelled on:{' '}
+                    {template.sourceUrls.map((url, index) => (
+                      <span key={url}>
+                        {index > 0 ? ', ' : ''}
+                        <a
+                          href={url}
+                          rel="noreferrer noopener nofollow"
+                          className="underline hover:text-plum-700"
+                        >
+                          {new URL(url).hostname}
+                        </a>
+                      </span>
+                    ))}
+                  </p>
+                </div>
               </li>
             );
           })}
