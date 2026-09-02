@@ -48,22 +48,29 @@ $ pnpm exec eslint .                    clean
 $ pnpm run typecheck                    Tasks: 8 successful, 8 total
 $ pnpm run test                         Tasks: 9 successful, 9 total
 
-@loopcraft/core                Tests  109 passed (109)
+@loopcraft/web                 Tests  183 passed (183)
 @loopcraft/scoring             Tests  132 passed (132)
-@loopcraft/web                 Tests  125 passed (125)
+@loopcraft/core                Tests  109 passed (109)
+@loopcraft/providers           Tests   61 passed | 1 skipped (62)
 @loopcraft/sandbox             Tests   53 passed  (53)
 @loopcraft/design              Tests   42 passed  (42)
+@loopcraft/web (a11y)          Tests   33 passed  (33)
 @loopcraft/billing             Tests   29 passed  (29)
-@loopcraft/web (a11y)          Tests   23 passed  (23)
-@loopcraft/providers           Tests   22 passed  (22)
 @loopcraft/db                  Tests   18 passed  (18)
 eslint-plugin-loopcraft        Tests   17 passed  (17)
 
 $ cd apps/worker && pytest -q            46 passed
 ```
 
-**616 tests, 0 failures, 0 unrun** (570 TypeScript + 46 Python). Zero `any` across
-`packages/*`.
+**723 tests, 0 failures, 1 skipped** (677 TypeScript + 46 Python). Zero `any` across
+`packages/*`. Re-measured 2026-09-02; the counts grew with the video framing check and the
+responsive design pass. The one skip is a provider suite that requires a live credential.
+
+`pnpm exec eslint .` needs Node 22 (`.nvmrc`, and `engines.node >= 22`): the lint plugin
+imports the banned-token vocabulary straight from its TypeScript source, which older runtimes
+cannot load. On Node 18 the command aborts with `Unknown file extension ".ts"` and `next
+build` degrades it to a warning it prints but does not fail on -- so a lint run that appears
+to pass on the wrong Node has in fact not run at all. Check `node -v` before trusting it.
 
 ### 3.1 Running processes
 

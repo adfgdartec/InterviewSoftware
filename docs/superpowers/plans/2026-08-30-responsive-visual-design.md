@@ -31,7 +31,7 @@
 **Interfaces:**
 - Produces: the CSS custom properties `--color-plum-900`, `--color-plum-700`, `--color-plum-100`, `--color-gold-600`, `--color-gold-100`, `--color-neutral-900`, `--color-neutral-600`, `--color-neutral-200`, `--color-neutral-50`, `--color-success`, `--color-warning`, `--color-danger`, `--font-sans` (all consumed by every later task via Tailwind utilities like `text-plum-900`, `bg-gold-100`, `font-sans`, `text-danger`).
 
-- [ ] **Step 1: Add the Tailwind dependencies to `apps/web/package.json`**
+- [x] **Step 1: Add the Tailwind dependencies to `apps/web/package.json`**
 
 Edit the `devDependencies` block to add three entries (alphabetical, matching the file's existing style):
 
@@ -50,12 +50,12 @@ Edit the `devDependencies` block to add three entries (alphabetical, matching th
   }
 ```
 
-- [ ] **Step 2: Install**
+- [x] **Step 2: Install**
 
 Run: `pnpm install`
 Expected: lockfile updates, no errors. Confirm with `pnpm --filter @loopcraft/web ls tailwindcss` — expect `tailwindcss 4.3.3`.
 
-- [ ] **Step 3: Create the PostCSS config**
+- [x] **Step 3: Create the PostCSS config**
 
 Create `apps/web/postcss.config.mjs`:
 
@@ -67,7 +67,7 @@ export default {
 };
 ```
 
-- [ ] **Step 4: Create the theme + global stylesheet**
+- [x] **Step 4: Create the theme + global stylesheet**
 
 Create `apps/web/src/app/globals.css`:
 
@@ -124,12 +124,12 @@ h3 {
 }
 ```
 
-- [ ] **Step 5: Verify the workspace still builds**
+- [x] **Step 5: Verify the workspace still builds**
 
 Run: `pnpm --filter @loopcraft/web run typecheck`
 Expected: passes (this step adds no `.tsx` changes yet, so this just confirms the new config files didn't break anything).
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add apps/web/package.json pnpm-lock.yaml apps/web/postcss.config.mjs apps/web/src/app/globals.css
@@ -148,7 +148,7 @@ git commit -m "feat(web): install and configure Tailwind CSS v4 with the plum/go
 - Consumes: `--font-sans` and the color tokens from Task 1's `globals.css`.
 - Produces: `MobileNavToggle` (a client component taking `children: ReactNode`, rendering a `md:hidden` toggle button plus its children in a `div` whose visibility class is `open ? 'block' : 'hidden md:block'`) — self-contained, consumed only by `layout.tsx` in this task.
 
-- [ ] **Step 1: Create the toggle component**
+- [x] **Step 1: Create the toggle component**
 
 Create `apps/web/src/components/MobileNavToggle.tsx`:
 
@@ -204,7 +204,7 @@ export function MobileNavToggle({ children }: MobileNavToggleProps): ReactElemen
 }
 ```
 
-- [ ] **Step 2: Restyle the root layout**
+- [x] **Step 2: Restyle the root layout**
 
 Replace the full contents of `apps/web/src/app/layout.tsx`:
 
@@ -289,12 +289,12 @@ export default function RootLayout({ children }: { children: ReactNode }): React
 }
 ```
 
-- [ ] **Step 3: Verify**
+- [x] **Step 3: Verify**
 
 Run: `pnpm --filter @loopcraft/web run typecheck && pnpm --filter @loopcraft/web run test:a11y`
 Expected: both pass. (`layout.tsx` is not imported by the a11y suite, so this mainly confirms Task 1/2's files compile together and nothing else regressed.)
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add apps/web/src/components/MobileNavToggle.tsx apps/web/src/app/layout.tsx
@@ -312,7 +312,7 @@ git commit -m "feat(web): responsive header nav with mobile hamburger toggle"
 - Consumes: color tokens from Task 1.
 - Produces: no signature change — `ScoreWithIntervalProps`, `AbilityReadoutProps`, and both exported function names/shapes are unchanged, only their JSX/className bodies change. Later tasks (`Dashboard.tsx`, `session/[id]/page.tsx`) consume these two components exactly as before.
 
-- [ ] **Step 1: Replace the file contents**
+- [x] **Step 1: Replace the file contents**
 
 Replace the full contents of `apps/web/src/components/ScoreWithInterval.tsx`:
 
@@ -445,12 +445,12 @@ export function AbilityReadout(props: AbilityReadoutProps): ReactElement {
 }
 ```
 
-- [ ] **Step 2: Verify**
+- [x] **Step 2: Verify**
 
 Run: `pnpm --filter @loopcraft/web run typecheck && pnpm --filter @loopcraft/web run test:a11y`
 Expected: both pass — the a11y suite directly imports `ScoreWithInterval`/`AbilityReadout` and must show 0 critical/serious violations, same as before this change.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add apps/web/src/components/ScoreWithInterval.tsx
@@ -468,7 +468,7 @@ git commit -m "feat(web): style ScoreWithInterval/AbilityReadout as a shared sco
 - Consumes: color tokens from Task 1.
 - Produces: no signature change — `StartLoopButtonProps` and the export name are unchanged.
 
-- [ ] **Step 1: Replace the file contents**
+- [x] **Step 1: Replace the file contents**
 
 Replace the full contents of `apps/web/src/components/StartLoopButton.tsx`:
 
@@ -535,12 +535,12 @@ export function StartLoopButton({ loopTemplateId, levelBand }: StartLoopButtonPr
 }
 ```
 
-- [ ] **Step 2: Verify**
+- [x] **Step 2: Verify**
 
 Run: `pnpm --filter @loopcraft/web run typecheck && pnpm --filter @loopcraft/web run test:a11y`
 Expected: both pass (`StartLoopButton` renders inside `PrepPage`, which the a11y suite audits).
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add apps/web/src/components/StartLoopButton.tsx
@@ -558,7 +558,7 @@ git commit -m "feat(web): style StartLoopButton"
 - Consumes: color tokens from Task 1.
 - Produces: no signature change — `VoiceAnswerButtonProps` and the export name are unchanged. Consumed by Task 8 (`session/[id]/page.tsx`) exactly as before.
 
-- [ ] **Step 1: Replace the file contents**
+- [x] **Step 1: Replace the file contents**
 
 Replace the full contents of `apps/web/src/components/VoiceAnswerButton.tsx`:
 
@@ -661,12 +661,12 @@ export function VoiceAnswerButton({ onTranscribed, disabled }: VoiceAnswerButton
 }
 ```
 
-- [ ] **Step 2: Verify**
+- [x] **Step 2: Verify**
 
 Run: `pnpm --filter @loopcraft/web run typecheck`
 Expected: passes. (`VoiceAnswerButton` is not imported by the static-markup a11y suite — it is only reachable through `session/[id]/page.tsx`, a client-rendered dynamic route — so this task's real verification is Task 11's Playwright pass.)
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add apps/web/src/components/VoiceAnswerButton.tsx
@@ -684,7 +684,7 @@ git commit -m "feat(web): style VoiceAnswerButton with recording/transcribing st
 - Consumes: `StartLoopButton` (Task 4), color tokens (Task 1), `LOOP_TEMPLATES`/`TRACKS`/`trackById` from `@loopcraft/core` (unchanged imports).
 - Produces: no signature change — default export `PrepPage` unchanged, consumed by `apps/web/test/a11y.test.tsx`.
 
-- [ ] **Step 1: Replace the file contents**
+- [x] **Step 1: Replace the file contents**
 
 Replace the full contents of `apps/web/src/app/page.tsx`:
 
@@ -784,12 +784,12 @@ export default function PrepPage(): ReactElement {
 }
 ```
 
-- [ ] **Step 2: Verify**
+- [x] **Step 2: Verify**
 
 Run: `pnpm --filter @loopcraft/web run typecheck && pnpm --filter @loopcraft/web run test:a11y`
 Expected: both pass.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add apps/web/src/app/page.tsx
@@ -807,7 +807,7 @@ git commit -m "feat(web): responsive card grid for the prep page"
 - Consumes: `AbilityReadout`/`ScoreWithInterval` (Task 3), color tokens (Task 1).
 - Produces: no signature change — `DashboardProps`, `DashboardDimension`, `DashboardRoundScore`, and the `Dashboard` export are unchanged. Consumed by `apps/web/test/a11y.test.tsx` and `apps/web/src/app/dashboard/page.tsx` exactly as before.
 
-- [ ] **Step 1: Replace the file contents**
+- [x] **Step 1: Replace the file contents**
 
 Replace the full contents of `apps/web/src/components/Dashboard.tsx`:
 
@@ -951,12 +951,12 @@ export function Dashboard(props: DashboardProps): ReactElement {
 }
 ```
 
-- [ ] **Step 2: Verify**
+- [x] **Step 2: Verify**
 
 Run: `pnpm --filter @loopcraft/web run typecheck && pnpm --filter @loopcraft/web run test:a11y`
 Expected: both pass.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add apps/web/src/components/Dashboard.tsx
@@ -974,7 +974,7 @@ git commit -m "feat(web): responsive stat-card grid for the dashboard"
 - Consumes: `ScoreWithInterval` (Task 3), `VoiceAnswerButton` (Task 5), color tokens (Task 1).
 - Produces: no signature change — default export `SessionPage` and all internal types (`SessionView`, `DebriefAttribute`, `DebriefPacket`) are unchanged.
 
-- [ ] **Step 1: Replace the file contents**
+- [x] **Step 1: Replace the file contents**
 
 Replace the full contents of `apps/web/src/app/session/[id]/page.tsx`:
 
@@ -1241,12 +1241,12 @@ export default function SessionPage({ params }: { params: Promise<{ id: string }
 }
 ```
 
-- [ ] **Step 2: Verify**
+- [x] **Step 2: Verify**
 
 Run: `pnpm --filter @loopcraft/web run typecheck`
 Expected: passes. (This route is not covered by the static-markup a11y suite — real verification is Task 11's Playwright pass through a live session.)
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add "apps/web/src/app/session/[id]/page.tsx"
@@ -1264,7 +1264,7 @@ git commit -m "feat(web): style the interview session flow and debrief"
 - Consumes: `BRAND` from `@loopcraft/core` (unchanged import), color tokens (Task 1).
 - Produces: no signature change — default export `CalibrationPage` unchanged, consumed by `apps/web/test/a11y.test.tsx`.
 
-- [ ] **Step 1: Replace the file contents**
+- [x] **Step 1: Replace the file contents**
 
 Replace the full contents of `apps/web/src/app/calibration/page.tsx`:
 
@@ -1374,12 +1374,12 @@ export default function CalibrationPage(): ReactElement {
 }
 ```
 
-- [ ] **Step 2: Verify**
+- [x] **Step 2: Verify**
 
 Run: `pnpm --filter @loopcraft/web run typecheck && pnpm --filter @loopcraft/web run test:a11y`
 Expected: both pass. Also run `pnpm --filter @loopcraft/web run lint` — this file is exempted from `loopcraft/no-affect-inference` (see `eslint.config.js`), so it must still pass cleanly on every other rule.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add apps/web/src/app/calibration/page.tsx
@@ -1397,7 +1397,7 @@ git commit -m "feat(web): style the calibration page as readable long-form conte
 - Consumes: `BRAND` from `@loopcraft/core` (unchanged import), color tokens (Task 1).
 - Produces: no signature change — default export `CompliancePage` unchanged, consumed by `apps/web/test/a11y.test.tsx`.
 
-- [ ] **Step 1: Replace the file contents**
+- [x] **Step 1: Replace the file contents**
 
 Replace the full contents of `apps/web/src/app/compliance/page.tsx`:
 
@@ -1510,12 +1510,12 @@ export default function CompliancePage(): ReactElement {
 }
 ```
 
-- [ ] **Step 2: Verify**
+- [x] **Step 2: Verify**
 
 Run: `pnpm --filter @loopcraft/web run typecheck && pnpm --filter @loopcraft/web run test:a11y`
 Expected: both pass.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add apps/web/src/app/compliance/page.tsx
@@ -1530,27 +1530,27 @@ git commit -m "feat(web): style the compliance page as readable long-form conten
 
 **Interfaces:** none — this task consumes every file from Tasks 1–10 as a whole and produces no new interface.
 
-- [ ] **Step 1: Full workspace test suite**
+- [x] **Step 1: Full workspace test suite**
 
 Run: `pnpm run test`
 Expected: `9 successful, 9 total` (same task count as before this plan started), including `@loopcraft/web:test` (143 passed) and the a11y config's 23 passed.
 
-- [ ] **Step 2: Lint and typecheck**
+- [x] **Step 2: Lint and typecheck**
 
 Run: `pnpm exec eslint . && pnpm run typecheck`
 Expected: both clean, no errors.
 
-- [ ] **Step 3: Production build**
+- [x] **Step 3: Production build**
 
 Run: `pnpm --filter @loopcraft/web run build`
 Expected: builds successfully — this is the first real proof Tailwind's CSS pipeline compiles correctly for production, not just in dev mode.
 
-- [ ] **Step 4: Start the dev server**
+- [x] **Step 4: Start the dev server**
 
 Run (background): `pnpm --filter @loopcraft/web run dev`
 Expected: ready on `http://localhost:3100`.
 
-- [ ] **Step 5: Playwright responsive walkthrough**
+- [x] **Step 5: Playwright responsive walkthrough**
 
 Using the `mcp__playwright__*` tools, for each of the 5 routes (`/`, `/dashboard`, `/session/<a real session id created via the Start button>`, `/calibration`, `/compliance`):
 1. Resize to a mobile viewport (375×812) and take a screenshot.
@@ -1560,11 +1560,11 @@ Using the `mcp__playwright__*` tools, for each of the 5 routes (`/`, `/dashboard
 
 Expected: all 10 screenshots show the plum/gold palette applied, no unstyled/bare-HTML flash, no horizontal overflow at 375px, and the nav collapses/expands correctly. Any visual defect found here gets fixed in the relevant task's file before this task is considered done — this is the concrete verification for the two things the automated suites cannot check (real responsive layout, and the two files — `VoiceAnswerButton` and the session page — that the static a11y suite never renders).
 
-- [ ] **Step 6: Stop the dev server**
+- [x] **Step 6: Stop the dev server**
 
 Stop the background dev server process started in Step 4.
 
-- [ ] **Step 7: Final commit (only if Step 5 required fixes)**
+- [x] **Step 7: Final commit (only if Step 5 required fixes)**
 
 If Step 5 required any fixes, stage and commit them with a message describing what the visual walkthrough caught, e.g.:
 
@@ -1574,3 +1574,47 @@ git commit -m "fix(web): correct <specific visual defect> found in the responsiv
 ```
 
 If Step 5 required no fixes, this task needs no commit of its own — Tasks 1–10's commits already represent the complete, verified change.
+
+---
+
+## Completion record — 2026-09-02
+
+Task 11 was the outstanding task. Executed in full against a real dev server on Node
+22.22.3 (`.nvmrc`); every number below is measured output, not an estimate.
+
+**Steps 1–3, automated gates**
+
+| Gate | Result |
+| --- | --- |
+| `pnpm run test` | 9 successful, 9 total — 677 tests, 0 failures, 1 skipped |
+| `pnpm exec eslint .` | clean |
+| `pnpm run typecheck` | 8 successful, 8 total |
+| `pnpm --filter @loopcraft/web run build` | compiled successfully, 10/10 static pages |
+
+**Step 5, Playwright responsive walkthrough.** All five routes plus `/settings` were visited
+at 375×812 and 1280×800.
+
+- **No horizontal overflow anywhere.** `document.documentElement.scrollWidth` equalled
+  `clientWidth` (375) on every route, and a sweep for any element wider than the viewport
+  returned empty on each.
+- **Palette applied**, sampled from computed style rather than by eye: headings and the
+  wordmark resolve to `rgb(59, 18, 54)` (plum-900) against a `rgb(250, 247, 249)` page.
+- **Nav toggle correct at 375px**: hamburger visible, wrapper `display: none` while
+  collapsed, `aria-expanded` flips `false → true` on click, all five links appear (wrapper
+  height 213px), and the accessible label flips "Open menu" → "Close menu".
+- **Nav inline at 1280px**: hamburger computes `display: none`, wrapper is `block`, 5 links.
+- **Real answer submission exercised** at 375px on `/session/[id]`, not just static markup: a
+  790-character answer was typed and submitted, the button entered its "Submitting…" state,
+  and the page advanced from *Round 1 of 5 — warmup* to *Round 2 of 5 — domain* with a newly
+  generated question. No overflow at any point in the flow.
+
+**Step 7, one defect found and fixed.** The loop cards carried `flex flex-col` with nothing
+claiming the free space, so the class was inert: the three cards of the first desktop row put
+their start buttons at 596px, 644px and 704px. Wrapping the action block in `mt-auto` aligned
+them at 686px (`fix(web): align the loop cards' start buttons across a row`). Mobile is
+single-column and unaffected.
+
+**Limit, stated so the green result is not over-read.** Colour *contrast* is still unverified.
+The a11y suite files it as `incomplete` because jsdom has no canvas, and this walkthrough
+sampled computed colour values without computing WCAG contrast ratios against every
+background. That check still needs a real audit before launch.

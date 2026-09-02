@@ -28,7 +28,7 @@
 **Interfaces:**
 - Produces: `users.video_opt_in` (boolean, default false), a check constraint on `users.jurisdiction` restricting it to `('unknown', 'eu', 'illinois', 'us_other', 'other')`. Consumed by Task 2 (`videoEligible`) and Task 4 (`/api/users/me`).
 
-- [ ] **Step 1: Write the migration**
+- [x] **Step 1: Write the migration**
 
 Create `packages/db/migrations/0007_video_eligibility.sql`:
 
@@ -50,12 +50,12 @@ alter table users
   check (jurisdiction in ('unknown', 'eu', 'illinois', 'us_other', 'other'));
 ```
 
-- [ ] **Step 2: Apply to local Postgres**
+- [x] **Step 2: Apply to local Postgres**
 
 Run: `pnpm --filter @loopcraft/db run migrate`
 Expected output includes `APPLIED  0007_video_eligibility.sql`.
 
-- [ ] **Step 3: Apply to the real Supabase project the dev server uses**
+- [x] **Step 3: Apply to the real Supabase project the dev server uses**
 
 Run (reads `DATABASE_URL`/`LOOPCRAFT_ALLOW_REMOTE_MIGRATIONS` from `apps/web/.env.local`):
 
@@ -66,7 +66,7 @@ LOOPCRAFT_ALLOW_REMOTE_MIGRATIONS=1 pnpm exec tsx src/migrate.ts
 
 Expected: `APPLIED  0007_video_eligibility.sql` against the `*.supabase.com` hostname.
 
-- [ ] **Step 4: Verify with a direct query against both databases**
+- [x] **Step 4: Verify with a direct query against both databases**
 
 The local Postgres instance only ever holds `loopcraft_test` (what the automated test suite
 uses); the actual running dev server points entirely at the Supabase project from
@@ -83,7 +83,7 @@ cd apps/web && set -a && source .env.local && set +a && psql "$DATABASE_URL" -c 
 
 Confirm `video_opt_in` and the `users_jurisdiction_check` constraint appear in both.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add packages/db/migrations/0007_video_eligibility.sql
@@ -101,7 +101,7 @@ git commit -m "feat(db): add video_opt_in and jurisdiction constraint (migration
 **Interfaces:**
 - Produces: `videoEligible(input: VideoEligibilityInput): boolean` and the `VideoEligibilityInput` interface (`jurisdiction: string`, `ageBand: string`, `videoOptIn: boolean`, `planAllowsVideo: boolean`). Consumed by Task 4 (`/api/users/me`) and Task 7 (`getSession`).
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 Create `apps/web/test/video-eligibility.test.ts`:
 
@@ -173,12 +173,12 @@ describe('videoEligible (fail-closed on every gate)', () => {
 });
 ```
 
-- [ ] **Step 2: Run to verify it fails**
+- [x] **Step 2: Run to verify it fails**
 
 Run: `pnpm --filter @loopcraft/web exec vitest run test/video-eligibility.test.ts`
 Expected: FAIL — `Cannot find module '../src/server/video-eligibility.js'`.
 
-- [ ] **Step 3: Write the implementation**
+- [x] **Step 3: Write the implementation**
 
 Create `apps/web/src/server/video-eligibility.ts`:
 
@@ -204,12 +204,12 @@ export function videoEligible(input: VideoEligibilityInput): boolean {
 }
 ```
 
-- [ ] **Step 4: Run to verify it passes**
+- [x] **Step 4: Run to verify it passes**
 
 Run: `pnpm --filter @loopcraft/web exec vitest run test/video-eligibility.test.ts`
 Expected: `Test Files  1 passed (1)`, `Tests  11 passed (11)`.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add apps/web/src/server/video-eligibility.ts apps/web/test/video-eligibility.test.ts
@@ -227,7 +227,7 @@ git commit -m "feat(web): add videoEligible, the fail-closed video gating functi
 **Interfaces:**
 - Produces: `framingVerdict(detection: FaceDetection, frame: FrameSize): FramingVerdict`, plus the `FaceDetection` (`boundingBox: {originX, originY, width, height}`, `eyeKeypoints: readonly [{x, y}, {x, y}]`), `FrameSize` (`width, height`), and `FramingVerdict` (`centered, distanceOk, eyeLineOk: boolean`, `messages: readonly string[]`) interfaces. Consumed by Task 6 (`CameraFramingCheck.tsx`).
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 Create `apps/web/test/framing-analysis.test.ts`:
 
@@ -315,12 +315,12 @@ describe('framingVerdict (purely geometric, no ML inference)', () => {
 });
 ```
 
-- [ ] **Step 2: Run to verify it fails**
+- [x] **Step 2: Run to verify it fails**
 
 Run: `pnpm --filter @loopcraft/web exec vitest run test/framing-analysis.test.ts`
 Expected: FAIL — `Cannot find module '../src/lib/framing-analysis.js'`.
 
-- [ ] **Step 3: Write the implementation**
+- [x] **Step 3: Write the implementation**
 
 Create `apps/web/src/lib/framing-analysis.ts`:
 
@@ -387,17 +387,17 @@ export function framingVerdict(detection: FaceDetection, frame: FrameSize): Fram
 }
 ```
 
-- [ ] **Step 4: Run to verify it passes**
+- [x] **Step 4: Run to verify it passes**
 
 Run: `pnpm --filter @loopcraft/web exec vitest run test/framing-analysis.test.ts`
 Expected: `Test Files  1 passed (1)`, `Tests  7 passed (7)`.
 
-- [ ] **Step 5: Lint check for the no-affect-inference rule**
+- [x] **Step 5: Lint check for the no-affect-inference rule**
 
 Run: `pnpm exec eslint apps/web/src/lib/framing-analysis.ts apps/web/test/framing-analysis.test.ts`
 Expected: clean (this step exists specifically to prove the geometric-only boundary holds under the project's own automated check, not just by inspection).
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add apps/web/src/lib/framing-analysis.ts apps/web/test/framing-analysis.test.ts
@@ -418,7 +418,7 @@ git commit -m "feat(web): add framingVerdict, purely geometric camera-framing an
 - Consumes: `videoEligible` (Task 2), the existing `guard`/`toErrorResponse` chain, `ResolvedEntitlement.plan.allowsVideo` (existing).
 - Produces: `getUserProfile(request, deps)` and `patchUserProfile(request, deps)` route handlers, an exported `UserProfileView` interface (`displayName: string | null`, `jurisdiction: string`, `ageBand: string`, `videoOptIn: boolean`, `videoEligible: boolean`), and the `patchUserProfileBody` zod schema. Consumed by Task 5 (settings page) and the app-router file in this task.
 
-- [ ] **Step 1: Add the fixture plan's `allows_video`, so the fully-eligible case is testable**
+- [x] **Step 1: Add the fixture plan's `allows_video`, so the fully-eligible case is testable**
 
 In `packages/db/src/seed-fixtures.ts`, find the plan insert (currently omits `allows_video`, so it defaults to `false`):
 
@@ -443,7 +443,7 @@ position as the `allows_video` column sits in the table):
       on conflict (id) do nothing`;
 ```
 
-- [ ] **Step 2: Write the failing integration tests**
+- [x] **Step 2: Write the failing integration tests**
 
 Add to `apps/web/test/routes.integration.test.ts` (new imports at the top, alongside the
 existing ones from `../src/server/routes.js`):
@@ -525,12 +525,12 @@ describe('GET/PATCH /api/users/me (video eligibility settings)', () => {
 });
 ```
 
-- [ ] **Step 3: Run to verify the new tests fail**
+- [x] **Step 3: Run to verify the new tests fail**
 
 Run: `pnpm --filter @loopcraft/web exec vitest run test/routes.integration.test.ts -t "video eligibility settings"`
 Expected: FAIL — `getUserProfile`/`patchUserProfile` are not exported from `routes.js`.
 
-- [ ] **Step 4: Add the route handlers to `routes.ts`**
+- [x] **Step 4: Add the route handlers to `routes.ts`**
 
 Add this import near the top of `apps/web/src/server/routes.ts`, alongside the existing
 `assertFeature, assertSessionQuota` import:
@@ -643,7 +643,7 @@ export async function patchUserProfile(request: Request, deps: RouteDeps): Promi
 }
 ```
 
-- [ ] **Step 5: Wire the App Router file**
+- [x] **Step 5: Wire the App Router file**
 
 Create `apps/web/src/app/api/users/me/route.ts`:
 
@@ -660,18 +660,18 @@ export async function PATCH(request: Request): Promise<Response> {
 }
 ```
 
-- [ ] **Step 6: Run the new tests, and the full file, to verify they pass**
+- [x] **Step 6: Run the new tests, and the full file, to verify they pass**
 
 Run: `pnpm --filter @loopcraft/web exec vitest run test/routes.integration.test.ts`
 Expected: every test in the file passes, including the 5 new ones (no regressions in the
 existing tests from the fixture plan change in Step 1).
 
-- [ ] **Step 7: Typecheck and lint**
+- [x] **Step 7: Typecheck and lint**
 
 Run: `pnpm --filter @loopcraft/web run typecheck && pnpm exec eslint apps/web/src/server/routes.ts apps/web/src/app/api/users/me/route.ts apps/web/test/routes.integration.test.ts packages/db/src/seed-fixtures.ts`
 Expected: both clean.
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
 git add apps/web/src/server/routes.ts apps/web/src/app/api/users/me/route.ts \
@@ -692,7 +692,7 @@ git commit -m "feat(web): add GET/PATCH /api/users/me with computed video eligib
 - Consumes: `GET`/`PATCH /api/users/me` (Task 4).
 - Produces: default export `SettingsPage`, consumed by Task 8's Playwright walkthrough and by the a11y suite added in this task.
 
-- [ ] **Step 1: Add "Settings" to the header nav**
+- [x] **Step 1: Add "Settings" to the header nav**
 
 In `apps/web/src/app/layout.tsx`, find:
 
@@ -717,7 +717,7 @@ const NAV_LINKS = [
 ] as const;
 ```
 
-- [ ] **Step 2: Write the settings page**
+- [x] **Step 2: Write the settings page**
 
 Create `apps/web/src/app/settings/page.tsx`:
 
@@ -905,7 +905,7 @@ export default function SettingsPage(): ReactElement {
 }
 ```
 
-- [ ] **Step 3: Add the settings page to the a11y suite**
+- [x] **Step 3: Add the settings page to the a11y suite**
 
 In `apps/web/test/a11y.test.tsx`, add the import alongside the existing page imports:
 
@@ -935,17 +935,17 @@ There are two places this array literal appears in the file (the axe-violation t
 banned-token/claims tables) — add the `SettingsPage` row to all of them, following the exact
 pattern the existing three pages already use in each.
 
-- [ ] **Step 4: Run the a11y suite**
+- [x] **Step 4: Run the a11y suite**
 
 Run: `pnpm --filter @loopcraft/web run test:a11y`
 Expected: all pass, including the new settings-page rows.
 
-- [ ] **Step 5: Typecheck and lint**
+- [x] **Step 5: Typecheck and lint**
 
 Run: `pnpm --filter @loopcraft/web run typecheck && pnpm exec eslint apps/web/src/app/settings/page.tsx apps/web/src/app/layout.tsx apps/web/test/a11y.test.tsx`
 Expected: both clean.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add apps/web/src/app/settings/page.tsx apps/web/src/app/layout.tsx apps/web/test/a11y.test.tsx
@@ -964,7 +964,7 @@ git commit -m "feat(web): add the settings page (jurisdiction, age band, video o
 - Consumes: `framingVerdict` (Task 3), `@mediapipe/tasks-vision`'s `FaceDetector`/`FilesetResolver`.
 - Produces: `CameraFramingCheck` (no props — self-contained), consumed by Task 7 (session page).
 
-- [ ] **Step 1: Add the dependency**
+- [x] **Step 1: Add the dependency**
 
 In `apps/web/package.json`, add to `dependencies` (it runs in the browser bundle, not just
 dev tooling, so it belongs in `dependencies` alongside `react`/`next`, not `devDependencies`):
@@ -973,12 +973,12 @@ dev tooling, so it belongs in `dependencies` alongside `react`/`next`, not `devD
     "@mediapipe/tasks-vision": "1.0.1",
 ```
 
-- [ ] **Step 2: Install**
+- [x] **Step 2: Install**
 
 Run: `pnpm install`
 Expected: lockfile updates, no errors.
 
-- [ ] **Step 3: Write the component**
+- [x] **Step 3: Write the component**
 
 Create `apps/web/src/components/CameraFramingCheck.tsx`:
 
@@ -1170,12 +1170,12 @@ export function CameraFramingCheck(): ReactElement {
 }
 ```
 
-- [ ] **Step 4: Typecheck and lint**
+- [x] **Step 4: Typecheck and lint**
 
 Run: `pnpm --filter @loopcraft/web run typecheck && pnpm exec eslint apps/web/src/components/CameraFramingCheck.tsx`
 Expected: both clean.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add apps/web/package.json pnpm-lock.yaml apps/web/src/components/CameraFramingCheck.tsx
@@ -1195,7 +1195,7 @@ git commit -m "feat(web): add CameraFramingCheck, the client-side one-shot frami
 - Consumes: `videoEligible` (Task 2), `CameraFramingCheck` (Task 6).
 - Produces: `SessionView.videoEligible: boolean` (new field), consumed by the session page's render logic.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Add to `apps/web/test/routes.integration.test.ts`, inside (or near) the existing session-flow
 describe block — this asserts the field exists and reflects real eligibility state:
@@ -1230,12 +1230,12 @@ describe('session view carries video eligibility', () => {
 
 (`getReq` and `startLoop` already exist earlier in this file — reuse them, do not redefine.)
 
-- [ ] **Step 2: Run to verify it fails**
+- [x] **Step 2: Run to verify it fails**
 
 Run: `pnpm --filter @loopcraft/web exec vitest run test/routes.integration.test.ts -t "video eligibility"`
 Expected: FAIL — `body.videoEligible` is `undefined`.
 
-- [ ] **Step 3: Add `videoEligible` to `SessionView` and `getSession`**
+- [x] **Step 3: Add `videoEligible` to `SessionView` and `getSession`**
 
 In `apps/web/src/server/routes.ts`, find the `SessionView` interface and add one field at
 the end:
@@ -1327,12 +1327,12 @@ export async function getSession(
 (`UserRow` and `videoEligible` were already added in Task 4 — no new import needed beyond
 what Task 4 introduced.)
 
-- [ ] **Step 4: Run to verify it passes**
+- [x] **Step 4: Run to verify it passes**
 
 Run: `pnpm --filter @loopcraft/web exec vitest run test/routes.integration.test.ts`
 Expected: every test in the file passes, including the 2 new ones.
 
-- [ ] **Step 5: Render `CameraFramingCheck` on the session page**
+- [x] **Step 5: Render `CameraFramingCheck` on the session page**
 
 In `apps/web/src/app/session/[id]/page.tsx`, add the import:
 
@@ -1387,12 +1387,12 @@ conditioned on eligibility:
       ) : null}
 ```
 
-- [ ] **Step 6: Typecheck and lint**
+- [x] **Step 6: Typecheck and lint**
 
 Run: `pnpm --filter @loopcraft/web run typecheck && pnpm exec eslint apps/web/src/server/routes.ts "apps/web/src/app/session/[id]/page.tsx" apps/web/test/routes.integration.test.ts`
 Expected: both clean.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add apps/web/src/server/routes.ts "apps/web/src/app/session/[id]/page.tsx" apps/web/test/routes.integration.test.ts
@@ -1407,20 +1407,20 @@ git commit -m "feat(web): surface the camera framing check on eligible sessions"
 
 **Interfaces:** none — consumes every file from Tasks 1–7 as a whole.
 
-- [ ] **Step 1: Full workspace test suite**
+- [x] **Step 1: Full workspace test suite**
 
 Run: `pnpm run test`
 Expected: every package's tests pass, including the new `video-eligibility.test.ts` (11),
 `framing-analysis.test.ts` (7), and the extended `routes.integration.test.ts` and
 `a11y.test.tsx`.
 
-- [ ] **Step 2: Lint, typecheck, build**
+- [x] **Step 2: Lint, typecheck, build**
 
 Run: `pnpm exec eslint . && pnpm run typecheck && pnpm --filter @loopcraft/web run build`
 Expected: all three clean — the build step is what proves `@mediapipe/tasks-vision`'s dynamic
 `import()` in `CameraFramingCheck.tsx` doesn't break Next's production bundling.
 
-- [ ] **Step 3: Fix the live demo plan, or the walkthrough's last step cannot pass**
+- [x] **Step 3: Fix the live demo plan, or the walkthrough's last step cannot pass**
 
 `packages/db/src/seed-dev.ts` seeds `demo-free` — the plan every real browser session
 actually runs on via `dev-identity.ts`'s auto-provisioning — with `allows_video: false`, and
@@ -1477,7 +1477,7 @@ git add packages/db/src/seed-dev.ts
 git commit -m "fix(db): make the live demo plan allow video, and let re-seeding update it"
 ```
 
-- [ ] **Step 4: Playwright walkthrough of the settings flow (real, verifiable)**
+- [x] **Step 4: Playwright walkthrough of the settings flow (real, verifiable)**
 
 Start the dev server, then using the `mcp__playwright__*` tools:
 1. Navigate to `/settings`. Confirm the video-opt-in checkbox renders `disabled` (jurisdiction
@@ -1497,7 +1497,7 @@ Start the dev server, then using the `mcp__playwright__*` tools:
 6. Set jurisdiction back to "European Union" on `/settings`. Return to a session page.
    Confirm the disclosure no longer appears — proves the gate is live, not cached.
 
-- [ ] **Step 5: Document the camera/WASM verification limit honestly**
+- [x] **Step 5: Document the camera/WASM verification limit honestly**
 
 Do not click "Start camera check" in Step 4's walkthrough and claim the live detection was
 verified — this environment cannot grant real or faked camera access through the available
@@ -1509,8 +1509,73 @@ tested at the `framingVerdict` boundary, but not exercised end-to-end against a 
 in this pass — same disclosure standard already applied to `VoiceAnswerButton.tsx` earlier
 in this build.
 
-- [ ] **Step 6: Commit any fixes found during the walkthrough**
+- [x] **Step 6: Commit any fixes found during the walkthrough**
 
 If Step 4 surfaces a defect, fix it in the relevant task's file and commit with a message
 describing what the walkthrough caught. If nothing is found, no commit is needed here —
 Tasks 1–7's commits already represent the complete, verified change.
+
+---
+
+## Completion record — 2026-09-02
+
+Task 8 was the outstanding task. Executed in full against the live Supabase database the dev
+server uses; every state transition below was confirmed both in the browser and by a direct
+`psql` query, so none of it rests on client-side appearance alone.
+
+**Steps 1–2, automated gates**
+
+| Gate | Result |
+| --- | --- |
+| `pnpm run test` | 9 successful, 9 total — 677 tests, 0 failures, 1 skipped |
+| `pnpm exec eslint .` | clean |
+| `pnpm run typecheck` | 8 successful, 8 total |
+| `pnpm --filter @loopcraft/web run build` | compiled successfully; `@mediapipe/tasks-vision`'s dynamic `import()` does not break production bundling |
+
+**Step 4 found a real defect before the walkthrough could pass.** Item 2 requires the opt-in
+checkbox to *stay disabled* when the region is the European Union. It did not: the settings
+page gated the control on `jurisdiction !== 'unknown' && ageBand !== 'unknown'`, while
+`videoEligible` permits only `us_other`/`other` at `16_plus`. An EU, Illinois or under-16 user
+could therefore tick "Enable the camera framing check", have it persist, and never see the
+feature — consent UI reporting a state the product will not honour, in precisely the area
+where spec §5.1 and §5.2 are strictest.
+
+Fixed in `fix(web): stop offering the video opt-in where the gate prohibits it`:
+
+- `lib/video-opt-in.ts` is now the single definition of the self-reported half of the gate;
+  `videoEligible` delegates to it, so page and server cannot drift apart again.
+- The disabled state names its specific reason rather than giving one vague sentence.
+- `PATCH /api/users/me` clears a stored opt-in when an update leaves the user in a prohibited
+  region or age band, so a recorded consent cannot outlive the eligibility that justified
+  collecting it.
+- `test/settings-gate.test.tsx` mounts the page against a stubbed profile to cover the wiring
+  the static a11y audit never reaches — it only ever renders the loading branch. The suite was
+  confirmed to fail (4 of 8) against the previous gate.
+
+**Step 4 walkthrough, after the fix.** Before state confirmed by direct query:
+`jurisdiction=unknown, age_band=unknown, video_opt_in=false`.
+
+| # | Action | Observed |
+| --- | --- | --- |
+| 1 | Load `/settings` fresh | checkbox `disabled`, "Available once your region and age are set above." |
+| 2 | Region → European Union, age → 16+ | checkbox **stays** `disabled`, "Not available in your region…" |
+| 3 | Region → Another US state | checkbox becomes enabled, helper text switches to the opt-in description |
+| 4 | Tick the box, reload | still checked; `psql` confirms `us_other / 16_plus / t` |
+| 5 | Start a loop | "Check your camera framing" disclosure appears on the session page |
+| 6 | Region → European Union, return to the session | disclosure gone; `psql` confirms `video_opt_in` went `t → f` |
+
+Item 6 exercises the new consent-clearing behaviour as well as the gate, and proves the gate
+is live rather than cached.
+
+**Step 5 — the camera/WASM verification limit, stated plainly.** "Start camera check" was
+never clicked. This environment cannot grant real or faked camera access through the available
+Playwright MCP tools, so a click would prove nothing and claiming otherwise would be false.
+What was verified is what DOM inspection can honestly establish: the `<details>` disclosure
+renders, its summary reads "Check your camera framing", and its "Start camera check" button is
+present, enabled, and keyboard-reachable (`tabIndex 0`).
+
+The `getUserMedia` → MediaPipe → `framingVerdict` pipeline is real code and is unit-tested at
+the `framingVerdict` boundary (7 tests), but it has **not** been exercised end to end against a
+live camera in this pass. That is the same disclosure standard already applied to
+`VoiceAnswerButton.tsx` earlier in this build, and it remains the one part of this feature
+that a browser-driven run with a fake media device still needs to cover.
