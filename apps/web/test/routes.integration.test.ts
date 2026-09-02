@@ -364,6 +364,52 @@ describe('GET/PATCH /api/users/me (video eligibility settings)', () => {
     expect(body.videoEligible).toBe(false);
   });
 
+  it('clears a stored opt-in when the region moves somewhere video is prohibited', async () => {
+    await patchUserProfile(
+      patchReq({ jurisdiction: 'us_other', ageBand: '16_plus', videoOptIn: true }),
+      deps(),
+    );
+    // Moving to the EU withdraws the consent rather than leaving it stored but unusable: a
+    // recorded opt-in must not outlive the eligibility that justified collecting it.
+    const res = await patchUserProfile(patchReq({ jurisdiction: 'eu' }), deps());
+    const body = await res.json();
+    expect(body.videoOptIn).toBe(false);
+    expect(body.videoEligible).toBe(false);
+
+    const getBody = await (await getUserProfile(getReq2(), deps())).json();
+    expect(getBody.videoOptIn).toBe(false);
+  });
+
+  it('clears a stored opt-in when the age band moves below 16', async () => {
+    await patchUserProfile(
+      patchReq({ jurisdiction: 'us_other', ageBand: '16_plus', videoOptIn: true }),
+      deps(),
+    );
+    const res = await patchUserProfile(patchReq({ ageBand: '13_to_15' }), deps());
+    expect((await res.json()).videoOptIn).toBe(false);
+  });
+
+  it('refuses to store an opt-in sent for a prohibited region in the first place', async () => {
+    const res = await patchUserProfile(
+      patchReq({ jurisdiction: 'illinois', ageBand: '16_plus', videoOptIn: true }),
+      deps(),
+    );
+    const body = await res.json();
+    expect(body.videoOptIn).toBe(false);
+    expect(body.videoEligible).toBe(false);
+  });
+
+  it('leaves an opt-in alone when the region stays eligible', async () => {
+    await patchUserProfile(
+      patchReq({ jurisdiction: 'us_other', ageBand: '16_plus', videoOptIn: true }),
+      deps(),
+    );
+    const res = await patchUserProfile(patchReq({ jurisdiction: 'other' }), deps());
+    const body = await res.json();
+    expect(body.videoOptIn).toBe(true);
+    expect(body.videoEligible).toBe(true);
+  });
+
   it('rejects an unknown jurisdiction value', async () => {
     const res = await patchUserProfile(patchReq({ jurisdiction: 'mars' }), deps());
     expect(res.status).toBe(400);

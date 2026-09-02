@@ -21,6 +21,7 @@ import { gradeSession, loadDebrief } from './grading-service.js';
 import type { GraderSampler } from '@loopcraft/scoring';
 import type { LoopTemplate } from '@loopcraft/core';
 import { videoEligible } from './video-eligibility.js';
+import { videoOptInPermitted } from '../lib/video-opt-in.js';
 
 /**
  * Route handlers, kept out of the App Router files so they are testable without a running
@@ -276,7 +277,24 @@ export async function patchUserProfile(request: Request, deps: RouteDeps): Promi
           video_opt_in = coalesce(${body.videoOptIn ?? null}, video_opt_in)
         where id = ${user.userId}
         returning display_name, jurisdiction, age_band, video_opt_in`;
-      return rows[0];
+      const updated = rows[0];
+      if (updated === undefined) return undefined;
+      // A recorded opt-in must not outlive the eligibility that justified collecting it. If
+      // this update leaves the user in a region or age band where video is prohibited, the
+      // consent is withdrawn here rather than left stored-but-unusable -- otherwise moving
+      // to the EU and back would silently re-enable a camera the user never re-consented to.
+      // The rule is applied in TypeScript, not duplicated in SQL, so there stays one
+      // definition of it (lib/video-opt-in.ts).
+      if (!updated.video_opt_in || videoOptInPermitted({
+        jurisdiction: updated.jurisdiction,
+        ageBand: updated.age_band,
+      })) {
+        return updated;
+      }
+      const cleared = await tx<UserRow[]>`
+        update users set video_opt_in = false where id = ${user.userId}
+        returning display_name, jurisdiction, age_band, video_opt_in`;
+      return cleared[0];
     });
     if (row === undefined) {
       return json(404, { error: 'User not found.', code: 'not_found', errorId });

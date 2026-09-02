@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState, type ReactElement } from 'react';
+import { videoOptInBlock, type VideoOptInBlock } from '../../lib/video-opt-in.js';
 
 interface Profile {
   displayName: string | null;
@@ -25,6 +26,15 @@ const AGE_BANDS: readonly { value: string; label: string }[] = [
   { value: '16_plus', label: '16 or older' },
 ];
 
+/** Why the opt-in is unavailable, named specifically rather than as one vague sentence. */
+const OPT_IN_HELP: Record<VideoOptInBlock, string> = {
+  incomplete: 'Available once your region and age are set above.',
+  jurisdiction:
+    'Not available in your region. The camera framing check is off entirely in the ' +
+    'European Union and in Illinois.',
+  age: 'Available at 16 or older.',
+};
+
 const INPUT_CLASS =
   'mt-2 w-full rounded-md border border-neutral-200 p-2 text-sm text-neutral-900 focus:border-gold-600 focus:outline-none focus:ring-2 focus:ring-gold-600';
 
@@ -34,9 +44,12 @@ async function readJson<T>(res: Response): Promise<T> {
 
 /**
  * Jurisdiction and age band are self-reported, not verified -- there is no identity
- * verification service in this product. The video opt-in toggle is disabled until both are
- * set to an eligible value: a disabled control with an explanation is more honest than one
- * that silently vanishes.
+ * verification service in this product. The video opt-in toggle is disabled unless the
+ * declared region and age permit it: a disabled control with an explanation is more honest
+ * than one that silently vanishes, and naming the specific reason is more honest still.
+ *
+ * The gate comes from `videoOptInBlock`, the same rule the server's `videoEligible` applies,
+ * so the control is never offered where a PATCH would refuse to store the opt-in.
  */
 export default function SettingsPage(): ReactElement {
   const [profile, setProfile] = useState<Profile | null>(null);
@@ -86,8 +99,12 @@ export default function SettingsPage(): ReactElement {
     return <p className="text-neutral-600">Loading your settings…</p>;
   }
 
-  const eligibleForOptIn =
-    profile !== null && profile.jurisdiction !== 'unknown' && profile.ageBand !== 'unknown';
+  const optInBlock: VideoOptInBlock | null =
+    profile === null
+      ? 'incomplete'
+      : videoOptInBlock({ jurisdiction: profile.jurisdiction, ageBand: profile.ageBand });
+  const eligibleForOptIn = optInBlock === null;
+
 
   return (
     <>
@@ -166,9 +183,9 @@ export default function SettingsPage(): ReactElement {
                 Enable the camera framing check
               </label>
               <p className="mt-1 text-xs text-neutral-600">
-                {eligibleForOptIn
+                {optInBlock === null
                   ? 'Optional. Off by default. Checks how you’re framed in your camera before recording an answer — nothing is ever uploaded or stored.'
-                  : 'Available once your region and age are set to an eligible value above.'}
+                  : OPT_IN_HELP[optInBlock]}
               </p>
             </div>
           </div>

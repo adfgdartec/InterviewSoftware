@@ -1,9 +1,14 @@
 /**
- * Whether the video framing check may be offered to a user. Spec §5.1: video is disabled
- * entirely for EU and Illinois users; spec §5.2 gates it at 16+ regardless of region. All
- * four conditions are required simultaneously -- there is no path where an unset
+ * Whether the video framing check may be offered to a user. The self-reported region and age
+ * half of the gate lives in `lib/video-opt-in.ts`, shared with the settings page so the
+ * control is never offered where this function would refuse; this module adds the two
+ * conditions only the server knows: the stored opt-in and the plan entitlement.
+ *
+ * All conditions are required simultaneously -- there is no path where an unset
  * (`'unknown'`) jurisdiction or age band is treated as eligible until proven otherwise.
  */
+
+import { videoOptInPermitted } from '../lib/video-opt-in.js';
 
 export interface VideoEligibilityInput {
   readonly jurisdiction: string;
@@ -13,7 +18,9 @@ export interface VideoEligibilityInput {
 }
 
 export function videoEligible(input: VideoEligibilityInput): boolean {
-  const jurisdictionOk = input.jurisdiction === 'us_other' || input.jurisdiction === 'other';
-  const ageOk = input.ageBand === '16_plus';
-  return jurisdictionOk && ageOk && input.videoOptIn && input.planAllowsVideo;
+  return (
+    videoOptInPermitted({ jurisdiction: input.jurisdiction, ageBand: input.ageBand }) &&
+    input.videoOptIn &&
+    input.planAllowsVideo
+  );
 }
