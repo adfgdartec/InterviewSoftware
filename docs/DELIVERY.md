@@ -9,7 +9,7 @@ Source of truth: [`docs/spec.md`](./spec.md) · Prototype defects avoided: [`doc
 | --- | --- | --- | --- |
 | 0 | Monorepo, CI, schema, RLS, auth, entitlements, provider registry, brand | `pnpm test` green; RLS cross-tenant test passes; no secrets client-side | **Complete, verified** |
 | 1 | Durable sessions, catalog, item bank, question generation with fallback, text-only loop | Full loop completes and resumes after refresh; contract tests pass for every track | **Complete, verified** |
-| 2 | Audio, ASR, delivery metrics, anchored grading n=3, debrief packet | Grader α vs gold set reported; no banned field names in any schema | **Partial** — grading and debrief wired end to end; second criterion met. First **not met**: no gold set, so no α. Audio/ASR not wired. |
+| 2 | Audio, ASR, delivery metrics, anchored grading n=3, debrief packet | Grader α vs gold set reported; no banned field names in any schema | **Partial** — grading, debrief, ASR and TTS wired end to end and verified live; second criterion met. First **not met**: no gold set, so no α. |
 | 3 | Coding round: sandboxed execution, hint ladder, interviewer interrupts | Sandbox escape suite passes; hint-dependence scored | **Complete, verified** |
 | 4 | System design canvas, diagram extraction, design rubric | Design round graded end to end | **Complete** |
 | 5 | IRT adaptivity, ability estimates, weakness graph, FSRS scheduler | θ and SE surfaced with uncertainty in UI | **Complete** |
@@ -215,8 +215,14 @@ No provider keys are needed: every test mocks its providers and demo mode is det
    reported anywhere, because none has been measured.
 2. **The grader sampler has no provider-backed implementation.** Grading, persistence and the
    debrief route are complete; only the deterministic demo sampler exists.
-3. **No ASR ingestion or audio capture.** The worker computes the §2.7 metrics from a
-   transcript and timings, but nothing feeds it from a session.
+3. ~~**No ASR ingestion or audio capture.**~~ **Closed 2026-09-02.** Both directions of the
+   voice pipeline are wired and verified against live providers: `POST /api/sessions/:id/audio`
+   sends real recorded audio to Deepgram `nova-3` and returns a transcript with per-word
+   timings in milliseconds (`packages/providers/test/deepgram-client.live.test.ts` proves this
+   against the real API), and `GET /api/sessions/:id/speech` synthesizes the interviewer's
+   current question with Cartesia `sonic-2`. Remaining limit: `VoiceAnswerButton` driving a
+   real microphone has never been exercised — no audio input device exists in the build
+   environment. The provider call it makes is verified; the capture that feeds it is not.
 
 **Verification debt**
 

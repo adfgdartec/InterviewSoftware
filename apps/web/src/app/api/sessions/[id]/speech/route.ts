@@ -1,10 +1,10 @@
-import { postSessionAudio } from '../../../../../server/routes.js';
+import { getSessionSpeech } from '../../../../../server/routes.js';
 import { buildRouteDeps } from '../../../../../server/deps.js';
 
-export async function POST(
+export async function GET(
   request: Request,
   { params }: { params: Promise<{ id: string }> },
 ): Promise<Response> {
   const { id } = await params;
-  return postSessionAudio(request, id, await buildRouteDeps());
+  return getSessionSpeech(request, id, await buildRouteDeps());
 }

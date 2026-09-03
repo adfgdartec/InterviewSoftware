@@ -9,11 +9,16 @@ export interface VoiceAnswerButtonProps {
 
 /**
  * Real microphone capture via MediaRecorder, uploaded to /api/sessions/:id/audio for real
- * Deepgram transcription. UNTESTED against a live Deepgram key -- this component has never
- * been clicked with STT actually configured, because no key exists in this environment. It
- * is real code, not a stub: MediaRecorder genuinely records, the upload genuinely POSTs raw
- * audio bytes, and a 503 from the route (STT unconfigured) is shown to the user honestly
- * rather than silently doing nothing.
+ * Deepgram transcription.
+ *
+ * What is verified: Deepgram itself. `deepgram-client.live.test.ts` sends real recorded
+ * speech to the live API and asserts the transcript and word timings that come back.
+ *
+ * What is NOT verified: this component driving a real microphone. There is no audio input
+ * device in the environment this was built in and no fake-device control surface in the
+ * available browser tooling, so the capture path here has never been exercised by a real
+ * voice. It is real code, not a stub -- MediaRecorder genuinely records and the upload
+ * genuinely POSTs raw audio bytes -- but that gap is stated rather than papered over.
  */
 export function VoiceAnswerButton({ onTranscribed, disabled }: VoiceAnswerButtonProps): ReactElement {
   const [recording, setRecording] = useState(false);
@@ -55,7 +60,10 @@ export function VoiceAnswerButton({ onTranscribed, disabled }: VoiceAnswerButton
       const sessionId = window.location.pathname.split('/').pop() ?? '';
       const res = await fetch(`/api/sessions/${sessionId}/audio`, {
         method: 'POST',
-        headers: { 'content-type': 'audio/webm' },
+        // The upload route is authenticated and rate limited, and counts as mutating because
+        // each call bills Deepgram -- so it requires an Idempotency-Key like every other
+        // spending route. Without this header the request is rejected with a 400.
+        headers: { 'content-type': 'audio/webm', 'idempotency-key': crypto.randomUUID() },
         body: blob,
       });
       const body = (await res.json()) as { transcript?: string; error?: string };

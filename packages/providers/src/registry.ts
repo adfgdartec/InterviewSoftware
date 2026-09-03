@@ -75,7 +75,7 @@ export const REGISTRY: readonly RegistryEntry[] = [
   },
   {
     purpose: 'tts',
-    primary: entry('elevenlabs', 'eleven_turbo_v2_5', 30_000, 2),
+    primary: entry('cartesia', 'sonic-2', 30_000, 2),
     fallbacks: [],
   },
 ] as const;

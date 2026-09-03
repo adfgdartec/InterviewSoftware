@@ -12,7 +12,10 @@
     "lint": {},
     "test": {
       "dependsOn": ["^build"],
-      "env": ["DATABASE_URL", "DATABASE_APP_URL", "OLLAMA_HOST", "LOOPCRAFT_ALLOW_REMOTE_MIGRATIONS"]
+      "env": [
+        "DATABASE_URL", "DATABASE_APP_URL", "OLLAMA_HOST", "LOOPCRAFT_ALLOW_REMOTE_MIGRATIONS",
+        "OPENAI_API_KEY", "DEEPGRAM_API_KEY", "CARTESIA_API_KEY"
+      ]
     }
   }
 }

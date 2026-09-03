@@ -10,4 +10,4 @@ export {
 } from './openai-client.js';
 export type { OpenAIChatMessage, OpenAIChatOptions } from './openai-client.js';
 export * from './deepgram-client.js';
-export * from './elevenlabs-client.js';
+export * from './cartesia-client.js';

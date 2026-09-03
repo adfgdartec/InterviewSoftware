@@ -4,6 +4,7 @@ import { use, useEffect, useState, type ReactElement } from 'react';
 import { ScoreWithInterval } from '../../../components/ScoreWithInterval.js';
 import { VoiceAnswerButton } from '../../../components/VoiceAnswerButton.js';
 import { CameraFramingCheck } from '../../../components/CameraFramingCheck.js';
+import { QuestionAudio } from '../../../components/QuestionAudio.js';
 
 interface SessionView {
   readonly sessionId: string;
@@ -157,6 +158,7 @@ export default function SessionPage({ params }: { params: Promise<{ id: string }
             Question
           </h2>
           <p className="mt-2 text-neutral-900">{view.question}</p>
+          <QuestionAudio sessionId={id} questionText={view.question} />
           <label htmlFor="answer" className="mt-4 block text-sm font-medium text-neutral-900">
             Your answer
           </label>

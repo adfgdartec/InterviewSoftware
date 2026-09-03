@@ -5,12 +5,15 @@ import { postgresEntitlementStore } from '../src/server/entitlement-store.js';
 import { FixedWindowRateLimiter } from '../src/server/rate-limit.js';
 import {
   getSession,
+  getSessionSpeech,
   getUserProfile,
   patchUserProfile,
   postSession,
+  postSessionAudio,
   postTurn,
   type RouteDeps,
 } from '../src/server/routes.js';
+import { cartesiaConfigured } from '@loopcraft/providers';
 
 /**
  * Integration layer from spec §3.5: full loop, resume-after-refresh, entitlement denial --
@@ -427,4 +430,159 @@ describe('GET/PATCH /api/users/me (video eligibility settings)', () => {
     // user B's own row stays at its own unrelated defaults, never user A's values.
     expect(bBody.jurisdiction).not.toBe('us_other');
   });
+});
+
+/**
+ * The interviewer's voice. `getSessionSpeech` reads the question it synthesizes from the
+ * session row, so there is deliberately no way for a caller to make it say arbitrary text --
+ * the request carries a session id and nothing else.
+ */
+describe('GET /api/sessions/:id/speech', () => {
+  const speechReq = (): Request => new Request('https://loopcraft.test/api/sessions/x/speech');
+
+  const withoutCartesiaKey = async (fn: () => Promise<void>): Promise<void> => {
+    const original = process.env['CARTESIA_API_KEY'];
+    delete process.env['CARTESIA_API_KEY'];
+    try {
+      await fn();
+    } finally {
+      if (original !== undefined) process.env['CARTESIA_API_KEY'] = original;
+    }
+  };
+
+  it('401s an unauthenticated caller', async () => {
+    const d = deps();
+    const { sessionId } = await startLoop(d);
+    const res = await getSessionSpeech(speechReq(), sessionId, { ...d, authenticate: async () => null });
+    expect(res.status).toBe(401);
+  });
+
+  it("404s another user's session rather than speaking it", async () => {
+    const { sessionId } = await startLoop(deps());
+    const res = await getSessionSpeech(speechReq(), sessionId, deps(FIXTURE.userB, FIXTURE.orgB));
+    expect(res.status).toBe(404);
+  });
+
+  it('404s when the loop is finished and there is no question left to speak', async () => {
+    const d = deps();
+    const { sessionId, turnId } = await startLoop(d);
+    let pending: string | null = turnId;
+    // Drive the loop to completion so pendingTurn is genuinely null, rather than asserting
+    // against a session that merely happens to have no question yet.
+    while (pending !== null) {
+      const res = await postTurn(req({ turnId: pending, transcript: 'An answer.' }), sessionId, d);
+      pending = ((await res.json()) as { pendingTurnId: string | null }).pendingTurnId;
+    }
+    const res = await getSessionSpeech(speechReq(), sessionId, d);
+    expect(res.status).toBe(404);
+  });
+
+  it('503s honestly when text-to-speech is not configured, rather than returning silence', async () => {
+    const { sessionId } = await startLoop(deps());
+    await withoutCartesiaKey(async () => {
+      const res = await getSessionSpeech(speechReq(), sessionId, deps());
+      expect(res.status).toBe(503);
+      expect(await res.json()).toMatchObject({ code: 'tts_unavailable' });
+    });
+  });
+
+  it.skipIf(!cartesiaConfigured())('returns real synthesized MP3 bytes for the pending question', async () => {
+    const { sessionId } = await startLoop(deps());
+    const res = await getSessionSpeech(speechReq(), sessionId, deps());
+    expect(res.status).toBe(200);
+    expect(res.headers.get('content-type')).toBe('audio/mpeg');
+    const bytes = new Uint8Array(await res.arrayBuffer());
+    expect(bytes.length).toBeGreaterThan(1_000);
+    const id3 = bytes[0] === 0x49 && bytes[1] === 0x44 && bytes[2] === 0x33;
+    const frameSync = bytes[0] === 0xff && (bytes[1]! & 0xe0) === 0xe0;
+    expect(id3 || frameSync).toBe(true);
+  }, 45_000);
+});
+
+/**
+ * The gap this route existed with until now: it ran no auth and no rate limit at all. These
+ * assertions are the regression gate on that, not decoration -- a real Deepgram key makes an
+ * open transcription endpoint a billable abuse vector.
+ */
+describe('POST /api/sessions/:id/audio', () => {
+  const audioReq = (
+    body: Uint8Array,
+    headers: Record<string, string> = { 'Idempotency-Key': 'k-audio-1' },
+  ): Request =>
+    new Request('https://loopcraft.test/api/sessions/x/audio', {
+      method: 'POST',
+      headers: { 'content-type': 'audio/webm', ...headers },
+      body: body as BodyInit,
+    });
+
+  const withDeepgramKey = async (key: string | null, fn: () => Promise<void>): Promise<void> => {
+    const original = process.env['DEEPGRAM_API_KEY'];
+    if (key === null) delete process.env['DEEPGRAM_API_KEY'];
+    else process.env['DEEPGRAM_API_KEY'] = key;
+    try {
+      await fn();
+    } finally {
+      if (original === undefined) delete process.env['DEEPGRAM_API_KEY'];
+      else process.env['DEEPGRAM_API_KEY'] = original;
+    }
+  };
+
+  it('401s an unauthenticated caller instead of transcribing for free', async () => {
+    const d = deps();
+    const { sessionId } = await startLoop(d);
+    const res = await postSessionAudio(audioReq(new Uint8Array([1, 2, 3])), sessionId, {
+      ...d, authenticate: async () => null,
+    });
+    expect(res.status).toBe(401);
+  });
+
+  it('400s without an Idempotency-Key, like every other route that spends money', async () => {
+    const { sessionId } = await startLoop(deps());
+    const res = await postSessionAudio(audioReq(new Uint8Array([1, 2, 3]), {}), sessionId, deps());
+    expect(res.status).toBe(400);
+    expect(await res.json()).toMatchObject({ code: 'idempotency_key_required' });
+  });
+
+  it('429s once the rate limit for the bucket is spent', async () => {
+    const d = deps(FIXTURE.userA, FIXTURE.orgA, { rateLimiter: new FixedWindowRateLimiter(1, 60_000) });
+    const { sessionId } = await startLoop(deps());
+    // Run with the key unset so the first call stops at the 503 rather than sending three
+    // junk bytes to the live provider. The limiter runs inside guard(), before either check,
+    // so the 429 this asserts is unaffected by which one the first call landed on.
+    await withDeepgramKey(null, async () => {
+      await postSessionAudio(audioReq(new Uint8Array([1, 2, 3])), sessionId, d);
+      const res = await postSessionAudio(audioReq(new Uint8Array([1, 2, 3])), sessionId, d);
+      expect(res.status).toBe(429);
+    });
+  });
+
+  it('503s honestly when speech-to-text is not configured', async () => {
+    const { sessionId } = await startLoop(deps());
+    await withDeepgramKey(null, async () => {
+      const res = await postSessionAudio(audioReq(new Uint8Array([1, 2, 3])), sessionId, deps());
+      expect(res.status).toBe(503);
+      expect(await res.json()).toMatchObject({ code: 'stt_unavailable' });
+    });
+  });
+
+  it('400s an empty recording without spending a provider call on it', async () => {
+    const { sessionId } = await startLoop(deps());
+    // A stub key, so the result does not depend on whether the machine running the suite has
+    // a real one. The emptiness check happens before any fetch, so nothing is ever sent.
+    await withDeepgramKey('dg-stub', async () => {
+      const res = await postSessionAudio(audioReq(new Uint8Array([])), sessionId, deps());
+      expect(res.status).toBe(400);
+      expect(await res.json()).toMatchObject({ code: 'empty_audio' });
+    });
+  });
+
+  it('413s a recording over the size cap without sending it anywhere', async () => {
+    const { sessionId } = await startLoop(deps());
+    await withDeepgramKey('dg-stub', async () => {
+      const oversized = new Uint8Array(25 * 1024 * 1024 + 1);
+      const res = await postSessionAudio(audioReq(oversized), sessionId, deps());
+      expect(res.status).toBe(413);
+      expect(await res.json()).toMatchObject({ code: 'audio_too_large' });
+    });
+  }, 30_000);
 });

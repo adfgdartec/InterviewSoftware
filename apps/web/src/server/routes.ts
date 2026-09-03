@@ -22,6 +22,12 @@ import type { GraderSampler } from '@loopcraft/scoring';
 import type { LoopTemplate } from '@loopcraft/core';
 import { videoEligible } from './video-eligibility.js';
 import { videoOptInPermitted } from '../lib/video-opt-in.js';
+import {
+  cartesiaConfigured,
+  deepgramConfigured,
+  synthesize,
+  transcribe,
+} from '@loopcraft/providers';
 
 /**
  * Route handlers, kept out of the App Router files so they are testable without a running
@@ -338,7 +344,112 @@ export async function postDebrief(
   }
 }
 
-/** POST /api/sessions/:id/turns — records an answer and issues the next question. */
+/**
+ * Largest recording accepted for transcription. A ~25 MB webm opus stream is far longer than
+ * any single interview answer; the cap exists so one caller cannot turn a billed provider
+ * into an unbounded expense with a single request.
+ */
+const MAX_AUDIO_BYTES = 25 * 1024 * 1024;
+
+/**
+ * GET /api/sessions/:id/speech -- the interviewer's current question, spoken.
+ *
+ * The text synthesized is the session's OWN pending question, read from Postgres. The client
+ * supplies nothing but the session id, which closes off the obvious abuse of a TTS endpoint
+ * that will say whatever it is handed (guardrail 5). Returns audio bytes, never the key.
+ */
+export async function getSessionSpeech(
+  request: Request,
+  sessionId: string,
+  deps: RouteDeps,
+): Promise<Response> {
+  const errorId = randomUUID();
+  try {
+    const { user } = await guard(request, deps, {
+      schema: z.object({}),
+      mutating: false,
+      rateLimitBucket: 'sessions.speech',
+    });
+    const question = await asUser(deps.sql, user.userId, async (tx) => {
+      const state = await loadSession(tx, sessionId);
+      return state.pendingTurn?.question ?? null;
+    });
+    if (question === null) {
+      return json(404, { error: 'This session has no question to speak.', code: 'not_found', errorId });
+    }
+    // 503, not silence and not a fabricated response -- the same honesty postDebrief and the
+    // audio route already apply to an unconfigured provider.
+    if (!cartesiaConfigured()) {
+      return json(503, { error: 'Text-to-speech is not configured.', code: 'tts_unavailable', errorId });
+    }
+    const audio = await synthesize(question);
+    return new Response(audio as BodyInit, {
+      status: 200,
+      headers: {
+        'content-type': 'audio/mpeg',
+        'content-length': String(audio.byteLength),
+        // The audio is derived from a question only this user's session holds. Caching it in
+        // a shared proxy would serve one candidate's question to another.
+        'cache-control': 'private, max-age=0, no-store',
+      },
+    });
+  } catch (error) {
+    const { status, body } = toErrorResponse(error, errorId);
+    return json(status, body);
+  }
+}
+
+/**
+ * POST /api/sessions/:id/audio -- one recorded answer in, one transcript out. The transcript
+ * still goes through /turns and its validation like a typed answer; this route only turns
+ * audio into text.
+ *
+ * The guard chain here is the fix for a real gap: this route previously ran no auth and no
+ * rate limit at all. That was survivable while `deepgramConfigured()` was always false, and
+ * is an open, billable abuse vector the moment a real Deepgram key exists. `mutating: true`
+ * because the call costs money, which also means it requires an `Idempotency-Key` like every
+ * other spending route.
+ */
+export async function postSessionAudio(
+  request: Request,
+  _sessionId: string,
+  deps: RouteDeps,
+): Promise<Response> {
+  const errorId = randomUUID();
+  // Cloned before the guard runs: guard() consumes the body as JSON for mutating routes, and
+  // a consumed stream cannot be re-read as bytes afterwards.
+  const audioRequest = request.clone();
+  try {
+    await guard(request, deps, {
+      schema: z.object({}),
+      mutating: true,
+      rateLimitBucket: 'sessions.audio',
+    });
+    if (!deepgramConfigured()) {
+      return json(503, { error: 'Speech-to-text is not configured.', code: 'stt_unavailable', errorId });
+    }
+    const contentType = audioRequest.headers.get('content-type') ?? 'audio/webm';
+    const bytes = new Uint8Array(await audioRequest.arrayBuffer());
+    if (bytes.length === 0) {
+      return json(400, { error: 'No audio received.', code: 'empty_audio', errorId });
+    }
+    if (bytes.length > MAX_AUDIO_BYTES) {
+      return json(413, { error: 'Recording too long.', code: 'audio_too_large', errorId });
+    }
+    try {
+      const result = await transcribe(bytes, contentType);
+      return json(200, { transcript: result.transcript, words: result.words });
+    } catch (transcriptionError) {
+      console.error(`[${errorId}]`, transcriptionError);
+      return json(502, { error: 'Transcription failed.', code: 'transcription_failed', errorId });
+    }
+  } catch (error) {
+    const { status, body } = toErrorResponse(error, errorId);
+    return json(status, body);
+  }
+}
+
+/** POST /api/sessions/:id/turns -- records an answer and issues the next question. */
 export async function postTurn(
   request: Request,
   sessionId: string,
