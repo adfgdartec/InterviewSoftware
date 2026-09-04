@@ -41,12 +41,12 @@ export function StartLoopButton({ loopTemplateId, levelBand }: StartLoopButtonPr
   }
 
   return (
-    <div className="mt-4">
+    <div>
       <button
         type="button"
         onClick={() => void start()}
         disabled={pending}
-        className="w-full rounded-md bg-plum-700 px-4 py-2 text-sm font-semibold text-white transition hover:bg-plum-900 disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto"
+        className="btn btn-primary w-full"
       >
         {pending ? 'Starting…' : 'Start this loop'}
       </button>

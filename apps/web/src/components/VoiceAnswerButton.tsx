@@ -79,10 +79,10 @@ export function VoiceAnswerButton({ onTranscribed, disabled }: VoiceAnswerButton
     }
   }
 
-  const idleClass =
-    'inline-flex items-center gap-2 rounded-md border border-plum-700 px-4 py-2 text-sm font-semibold text-plum-700 transition hover:bg-plum-100 disabled:cursor-not-allowed disabled:opacity-60';
-  const recordingClass =
-    'inline-flex animate-pulse items-center gap-2 rounded-md bg-plum-700 px-4 py-2 text-sm font-semibold text-white motion-reduce:animate-none';
+  // Recording is the one place a live indicator earns its keep: without it there is no way
+  // to tell a hot microphone from a dead one. It is a dot, not a pulsing button.
+  const idleClass = 'btn btn-quiet w-full sm:w-auto';
+  const recordingClass = 'btn btn-quiet w-full sm:w-auto border-danger text-danger';
 
   return (
     <div>
@@ -92,6 +92,14 @@ export function VoiceAnswerButton({ onTranscribed, disabled }: VoiceAnswerButton
         disabled={disabled === true || transcribing}
         className={recording ? recordingClass : idleClass}
       >
+        <span
+          aria-hidden="true"
+          className={
+            recording
+              ? 'h-2 w-2 shrink-0 rounded-full bg-danger motion-safe:animate-pulse'
+              : 'h-2 w-2 shrink-0 rounded-full bg-current opacity-40'
+          }
+        />
         {transcribing ? 'Transcribing…' : recording ? 'Stop recording' : 'Answer by voice'}
       </button>
       {error !== null ? (

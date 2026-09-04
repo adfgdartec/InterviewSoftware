@@ -111,7 +111,7 @@ export function CameraFramingCheck(): ReactElement {
 
   return (
     <details
-      className="mt-4 rounded-lg border border-neutral-200 bg-white p-4"
+      className="rounded-lg border border-room-rule bg-room-wall p-4"
       open={open}
       onToggle={(e) => {
         const isOpen = (e.target as HTMLDetailsElement).open;
@@ -119,7 +119,7 @@ export function CameraFramingCheck(): ReactElement {
         if (!isOpen) dismiss();
       }}
     >
-      <summary className="cursor-pointer text-sm font-medium text-plum-700">
+      <summary className="label cursor-pointer text-room-ink-2 transition-colors hover:text-room-ink">
         Check your camera framing
       </summary>
 
@@ -128,26 +128,26 @@ export function CameraFramingCheck(): ReactElement {
           <button
             type="button"
             onClick={() => void startCamera()}
-            className="rounded-md border border-plum-700 px-3 py-1.5 text-sm font-medium text-plum-700 hover:bg-plum-100"
+            className="btn btn-quiet"
           >
             Start camera check
           </button>
         ) : null}
 
-        {status === 'starting' ? <p className="text-sm text-neutral-600">Starting camera…</p> : null}
+        {status === 'starting' ? <p className="text-sm text-room-ink-2">Starting camera…</p> : null}
 
         <video
           ref={videoRef}
           muted
           playsInline
-          className={status === 'ready' || status === 'checked' ? 'mt-2 w-full max-w-xs rounded-md' : 'hidden'}
+          className={status === 'ready' || status === 'checked' ? 'mt-3 w-full max-w-xs rounded-lg border border-room-rule' : 'hidden'}
         />
 
         {status === 'ready' || status === 'checked' ? (
           <button
             type="button"
             onClick={checkFraming}
-            className="mt-3 rounded-md bg-plum-700 px-3 py-1.5 text-sm font-medium text-white hover:bg-plum-900"
+            className="btn btn-primary mt-3"
           >
             {status === 'checked' ? 'Check again' : 'Check my framing'}
           </button>
@@ -161,19 +161,19 @@ export function CameraFramingCheck(): ReactElement {
 
         {verdict !== null ? (
           <ul className="mt-3 space-y-1 text-sm">
-            <li className={verdict.centered ? 'text-success' : 'text-neutral-900'}>
+            <li className={verdict.centered ? 'text-success' : 'text-room-ink'}>
               {verdict.centered ? '✓ Centered' : '✗ Not centered'}
             </li>
-            <li className={verdict.distanceOk ? 'text-success' : 'text-neutral-900'}>
+            <li className={verdict.distanceOk ? 'text-success' : 'text-room-ink'}>
               {verdict.distanceOk ? '✓ Good distance' : '✗ Distance needs adjusting'}
             </li>
-            <li className={verdict.eyeLineOk ? 'text-success' : 'text-neutral-900'}>
+            <li className={verdict.eyeLineOk ? 'text-success' : 'text-room-ink'}>
               {verdict.eyeLineOk ? '✓ Eye line looks right' : '✗ Eye line needs adjusting'}
             </li>
           </ul>
         ) : null}
         {verdict !== null && verdict.messages.length > 0 ? (
-          <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-neutral-600">
+          <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-room-ink-2">
             {verdict.messages.map((m) => (
               <li key={m}>{m}</li>
             ))}

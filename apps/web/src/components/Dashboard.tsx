@@ -37,40 +37,50 @@ export function Dashboard(props: DashboardProps): ReactElement {
 
   return (
     <>
-      <h1 className="text-3xl font-bold text-plum-900">Your progress</h1>
+      <h1 className="display text-plum-900 text-[length:var(--text-display-s)]">Your progress</h1>
 
+      {/* The single most actionable thing on the page, so it leads and is the only block on
+          it wearing the gold. Everything below is reference. */}
       <section
         aria-labelledby="focus-heading"
-        className="mt-6 rounded-lg border border-gold-600 bg-gold-100 p-5"
+        className="mt-8 rounded-xl border border-gold-600/40 bg-gold-100 p-6"
       >
-        <h2 id="focus-heading" className="text-lg font-semibold text-plum-900">
+        <h2 id="focus-heading" className="label text-plum-900">
           What to practise next
         </h2>
         {focusDimension === null ? (
-          <p className="mt-2 text-sm text-neutral-900">
+          <p className="mt-3 max-w-[58ch] text-neutral-900">
             Not enough evidence yet to recommend a focus. Complete a few more rounds and a
             recommendation will appear here.
           </p>
         ) : (
-          <p className="mt-2 text-sm text-neutral-900">
-            Your weakest well-measured dimension is <strong>{focusDimension}</strong>. That is
+          <p className="mt-3 max-w-[58ch] text-lg text-neutral-900">
+            Your weakest well-measured dimension is{' '}
+            <strong className="font-semibold text-plum-900">{focusDimension}</strong>. That is
             where practice buys the most right now.
           </p>
         )}
       </section>
 
-      <section aria-labelledby="ability-heading" className="mt-8">
-        <h2 id="ability-heading" className="text-xl font-semibold text-plum-900">
-          Ability estimates
-        </h2>
-        <p className="mt-1 max-w-[65ch] text-sm text-neutral-600">
+      <section aria-labelledby="ability-heading" className="mt-14">
+        <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 border-b border-rule-firm pb-3">
+          <h2 id="ability-heading" className="display text-2xl text-plum-900">
+            Ability estimates
+          </h2>
+          <span className="label data text-neutral-600">
+            {measured.length} of {abilities.length} reportable
+          </span>
+        </div>
+        <p className="mt-4 max-w-[65ch] text-sm text-neutral-600">
           Each estimate is shown with its standard error. A wide interval means we do not know
           yet, not that you are inconsistent.
         </p>
         {abilities.length === 0 ? (
-          <p className="mt-4 text-sm text-neutral-600">No dimensions measured yet.</p>
+          <p className="mt-5 rounded-xl border border-dashed border-rule-firm bg-sunk p-6 text-sm text-neutral-600">
+            No dimensions measured yet.
+          </p>
         ) : (
-          <ul className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
+          <ul className="mt-5 grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
             {abilities.map((a) => (
               <li key={a.dimension}>
                 <AbilityReadout
@@ -84,19 +94,21 @@ export function Dashboard(props: DashboardProps): ReactElement {
             ))}
           </ul>
         )}
-        <p className="mt-3 text-xs text-neutral-600">
-          {measured.length} of {abilities.length} dimensions have enough evidence to report.
-        </p>
       </section>
 
-      <section aria-labelledby="recent-heading" className="mt-8">
-        <h2 id="recent-heading" className="text-xl font-semibold text-plum-900">
-          Most recent round
-        </h2>
+      <section aria-labelledby="recent-heading" className="mt-14">
+        <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 border-b border-rule-firm pb-3">
+          <h2 id="recent-heading" className="display text-2xl text-plum-900">
+            Most recent round
+          </h2>
+          <span className="label data text-neutral-600">{recentScores.length} scored</span>
+        </div>
         {recentScores.length === 0 ? (
-          <p className="mt-4 text-sm text-neutral-600">No graded rounds yet.</p>
+          <p className="mt-5 rounded-xl border border-dashed border-rule-firm bg-sunk p-6 text-sm text-neutral-600">
+            No graded rounds yet.
+          </p>
         ) : (
-          <ul className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
+          <ul className="mt-5 grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
             {recentScores.map((s) => (
               <li key={s.label}>
                 <ScoreWithInterval
@@ -113,18 +125,20 @@ export function Dashboard(props: DashboardProps): ReactElement {
         )}
       </section>
 
-      <section aria-labelledby="review-heading" className="mt-8">
-        <h2 id="review-heading" className="text-xl font-semibold text-plum-900">
-          Due for review
-        </h2>
+      <section aria-labelledby="review-heading" className="mt-14">
+        <div className="border-b border-rule-firm pb-3">
+          <h2 id="review-heading" className="display text-2xl text-plum-900">
+            Due for review
+          </h2>
+        </div>
         {dueForReview.length === 0 ? (
-          <p className="mt-4 text-sm text-neutral-600">Nothing is due right now.</p>
+          <p className="mt-5 text-sm text-neutral-600">Nothing is due right now.</p>
         ) : (
-          <ul className="mt-4 flex flex-wrap gap-2">
+          <ul className="mt-5 flex flex-wrap gap-2">
             {dueForReview.map((d) => (
               <li
                 key={d}
-                className="rounded-full bg-plum-100 px-3 py-1 text-sm font-medium text-plum-900"
+                className="rounded-full border border-plum-100 bg-plum-100 px-3.5 py-1.5 text-sm font-medium text-plum-900"
               >
                 {d}
               </li>

@@ -44,14 +44,16 @@ async function readJson<T>(res: Response): Promise<T> {
   return (await res.json()) as T;
 }
 
-const PRIMARY_BUTTON_CLASS =
-  'rounded-md bg-plum-700 px-4 py-2 text-sm font-semibold text-white transition hover:bg-plum-900 disabled:cursor-not-allowed disabled:opacity-60';
+/** Position of a 1-5 score along the gauge track, clamped so 1.0 still shows a mark. */
+function pct(value: number): number {
+  return Math.min(100, Math.max(0, ((value - 1) / 4) * 100));
+}
 
 /**
- * The actual loop-taking UI: shows the current question, takes an answer, submits it to the
- * real /turns route, and repeats until the loop is complete -- then fetches and renders the
- * real, graded debrief. This is the page the prep page's Start button had nowhere to send
- * anyone to before this change.
+ * The loop-taking UI. While a loop is in progress the page becomes a room: dark, one
+ * question at a time, the surrounding product out of the way. When the loop completes the
+ * room is left behind and the debrief renders on paper -- a report is a different kind of
+ * document from an interview, and it should not be read in the dark.
  */
 export default function SessionPage({ params }: { params: Promise<{ id: string }> }): ReactElement {
   const { id } = use(params);
@@ -66,7 +68,16 @@ export default function SessionPage({ params }: { params: Promise<{ id: string }
   useEffect(() => {
     let cancelled = false;
     async function load(): Promise<void> {
-      const res = await fetch(`/api/sessions/${id}`);
+      // A throwing fetch (server restarting, connection dropped) used to reject unhandled,
+      // which left the page on "Loading your session..." permanently with no way out. Any
+      // failure has to end in a visible, actionable state.
+      let res: Response;
+      try {
+        res = await fetch(`/api/sessions/${id}`);
+      } catch {
+        if (!cancelled) setError('Could not reach the server. Check your connection and reload.');
+        return;
+      }
       if (cancelled) return;
       if (!res.ok) {
         const body = await readJson<{ error?: string }>(res);
@@ -121,12 +132,14 @@ export default function SessionPage({ params }: { params: Promise<{ id: string }
   if (error !== null && view === null) {
     return (
       <>
-        <h1 className="text-2xl font-bold text-plum-900">Something went wrong</h1>
-        <p role="alert" className="mt-2 text-sm font-medium text-danger">
+        <h1 className="display text-plum-900 text-[length:var(--text-display-s)]">
+          Something went wrong
+        </h1>
+        <p role="alert" className="mt-3 text-sm font-medium text-danger">
           {error}
         </p>
-        <p className="mt-4">
-          <a href="/" className="font-medium text-plum-700 underline hover:text-plum-900">
+        <p className="mt-6">
+          <a href="/" className="btn btn-quiet">
             Back to the loop list
           </a>
         </p>
@@ -135,72 +148,111 @@ export default function SessionPage({ params }: { params: Promise<{ id: string }
   }
 
   if (view === null) {
-    return <p className="text-neutral-600">Loading your session…</p>;
+    return <p className="label text-neutral-600">Loading your session…</p>;
   }
+
+  const inProgress = view.status === 'in_progress' && view.question !== null;
 
   return (
     <>
-      <h1 className="text-2xl font-bold text-plum-900">
-        {view.trackId} &middot; {view.levelBand}
+      <h1 className="sr-only">
+        {view.trackId} {view.levelBand} rehearsal loop
       </h1>
-      <p className="mt-1 text-sm text-neutral-600">
-        Round {view.currentRoundPosition} of {view.roundCount}
-        {view.currentRoundType !== null ? ` — ${view.currentRoundType}` : ''}
-        {view.persona !== null ? ` (${view.persona})` : ''}
-      </p>
 
-      {view.status === 'in_progress' && view.question !== null ? (
-        <section
-          aria-labelledby="question-heading"
-          className="mt-6 max-w-[65ch] rounded-lg border border-neutral-200 bg-white p-5 shadow-sm"
-        >
-          <h2 id="question-heading" className="text-lg font-semibold text-plum-900">
-            Question
-          </h2>
-          <p className="mt-2 text-neutral-900">{view.question}</p>
-          <QuestionAudio sessionId={id} questionText={view.question} />
-          <label htmlFor="answer" className="mt-4 block text-sm font-medium text-neutral-900">
-            Your answer
-          </label>
-          <textarea
-            id="answer"
-            value={answer}
-            onChange={(e) => setAnswer(e.target.value)}
-            rows={8}
-            disabled={submitting}
-            className="mt-2 w-full rounded-md border border-neutral-200 p-3 text-sm text-neutral-900 focus:border-gold-600 focus:outline-none focus:ring-2 focus:ring-gold-600"
-          />
-          {error !== null ? (
-            <p role="alert" className="mt-2 text-sm font-medium text-danger">
-              {error}
-            </p>
-          ) : null}
-          <div className="mt-4 flex flex-col gap-3 md:flex-row md:items-center">
-            <button
-              type="button"
-              onClick={() => void submitAnswer()}
-              disabled={submitting || answer.trim() === ''}
-              className={PRIMARY_BUTTON_CLASS}
-            >
-              {submitting ? 'Submitting…' : 'Submit answer'}
-            </button>
-            <VoiceAnswerButton disabled={submitting} onTranscribed={(t) => setAnswer(t)} />
+      {inProgress ? (
+        <div className="room overflow-hidden rounded-2xl border border-room-rule shadow-2xl shadow-plum-900/10">
+          {/* Where you are, and how much is left. Ticks rather than a percentage: five
+              rounds is countable, and a progress bar would imply a smoother scale. */}
+          <div className="flex flex-wrap items-center justify-between gap-4 border-b border-room-rule px-5 py-4 sm:px-8">
+            <div className="min-w-0">
+              <p className="label text-room-ink-2">
+                {view.trackId} &middot; {view.levelBand}
+              </p>
+              <p className="mt-1 truncate text-sm text-room-ink">
+                {view.currentRoundType}
+                {view.persona !== null ? (
+                  <span className="text-room-ink-2"> — {view.persona}</span>
+                ) : null}
+              </p>
+            </div>
+            <div className="flex flex-col items-start gap-2 sm:items-end">
+              <div className="ticks" aria-hidden="true">
+                {Array.from({ length: view.roundCount }, (_, i) => (
+                  <i
+                    key={i}
+                    data-done={i + 1 < view.currentRoundPosition}
+                    data-current={i + 1 === view.currentRoundPosition}
+                  />
+                ))}
+              </div>
+              <p className="label data text-room-ink-2">
+                Round {view.currentRoundPosition} of {view.roundCount}
+              </p>
+            </div>
           </div>
-        </section>
-      ) : null}
 
-      {view.status === 'in_progress' && view.videoEligible ? (
-        <div className="max-w-[65ch]">
-          <CameraFramingCheck />
+          {/* The stage. The heading stays a real h2 for the landmark relationship; the
+              question itself is the thing that gets the size. */}
+          <section aria-labelledby="question-heading" className="room-stage px-5 py-12 sm:px-8 sm:py-16">
+            <h2 id="question-heading" className="label text-gold-600">
+              Question
+            </h2>
+            <p className="display mt-5 max-w-[26ch] text-balance text-[length:var(--text-display-s)] text-room-ink sm:max-w-[34ch]">
+              {view.question}
+            </p>
+            <QuestionAudio sessionId={id} questionText={view.question ?? ''} />
+          </section>
+
+          <div className="border-t border-room-rule px-5 py-6 sm:px-8">
+            <label htmlFor="answer" className="label block text-room-ink-2">
+              Your answer
+            </label>
+            <textarea
+              id="answer"
+              value={answer}
+              onChange={(e) => setAnswer(e.target.value)}
+              rows={7}
+              disabled={submitting}
+              placeholder="Speak it, or type it here."
+              className="mt-2 w-full resize-y rounded-lg border border-room-rule bg-room-floor p-4 text-base leading-relaxed text-room-ink placeholder:text-room-ink-2/60 focus:border-gold-600 focus:outline-none"
+            />
+            {error !== null ? (
+              <p role="alert" className="mt-2 text-sm font-medium text-danger">
+                {error}
+              </p>
+            ) : null}
+            <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <VoiceAnswerButton disabled={submitting} onTranscribed={(t) => setAnswer(t)} />
+              <button
+                type="button"
+                onClick={() => void submitAnswer()}
+                disabled={submitting || answer.trim() === ''}
+                className="btn btn-primary w-full sm:w-auto"
+              >
+                {submitting ? 'Submitting…' : 'Submit answer'}
+              </button>
+            </div>
+          </div>
+
+          {view.videoEligible ? (
+            <div className="border-t border-room-rule px-5 py-4 sm:px-8">
+              <CameraFramingCheck />
+            </div>
+          ) : null}
         </div>
       ) : null}
 
       {view.status === 'completed' && debrief === null ? (
-        <section className="mt-6 rounded-lg border border-neutral-200 bg-white p-5 shadow-sm">
-          <h2 className="text-lg font-semibold text-plum-900">Loop complete</h2>
-          <p className="mt-2 text-sm text-neutral-600">{view.answeredTurnCount} rounds answered.</p>
+        <section className="mx-auto max-w-xl py-10 text-center">
+          <p className="label text-plum-500">Loop complete</p>
+          <h2 className="display mt-3 text-plum-900 text-[length:var(--text-display-s)]">
+            {view.answeredTurnCount} rounds answered
+          </h2>
+          <p className="mt-4 text-neutral-600">
+            Grading runs three independent samples per dimension, so this takes a moment.
+          </p>
           {gradingError !== null ? (
-            <p role="alert" className="mt-2 text-sm font-medium text-danger">
+            <p role="alert" className="mt-3 text-sm font-medium text-danger">
               {gradingError}
             </p>
           ) : null}
@@ -208,7 +260,7 @@ export default function SessionPage({ params }: { params: Promise<{ id: string }
             type="button"
             onClick={() => void fetchDebrief()}
             disabled={grading}
-            className={`mt-4 ${PRIMARY_BUTTON_CLASS}`}
+            className="btn btn-primary mt-7"
           >
             {grading ? 'Grading…' : 'Get your debrief'}
           </button>
@@ -216,34 +268,55 @@ export default function SessionPage({ params }: { params: Promise<{ id: string }
       ) : null}
 
       {debrief !== null ? (
-        <section aria-labelledby="debrief-heading" className="mt-8">
-          <h2 id="debrief-heading" className="text-xl font-semibold text-plum-900">
-            Debrief
-          </h2>
-          <p className="mt-3 inline-block rounded-lg bg-gold-100 px-4 py-2">
-            <span className="text-sm text-neutral-600">Overall: </span>
-            <strong className="text-2xl font-bold text-plum-900">{debrief.overallDisplay}</strong>
-          </p>
-          <p className="mt-2 text-sm text-neutral-600">{debrief.methodNote}</p>
+        <section aria-labelledby="debrief-heading" className="mx-auto max-w-4xl">
+          <div className="border-b border-rule-firm pb-3">
+            <h2 id="debrief-heading" className="display text-2xl text-plum-900">
+              Debrief
+            </h2>
+          </div>
+
+          {/* The headline reading, typeset as a figure. The interval sits with the number in
+              the same element -- there is no layout here that can strip it off. */}
+          <div className="mt-8 grid gap-8 sm:grid-cols-[auto_1fr] sm:items-center">
+            <p className="data text-[3.5rem] leading-none text-plum-900">
+              {debrief.overallDisplay}
+            </p>
+            <div className="min-w-0">
+              <p className="label text-plum-500">Overall, across every dimension</p>
+              <div className="gauge mt-3 max-w-sm">
+                <span
+                  className="gauge-band"
+                  style={{
+                    left: `${pct(debrief.overall.intervalLow)}%`,
+                    right: `${100 - pct(debrief.overall.intervalHigh)}%`,
+                  }}
+                />
+                <span className="gauge-mark" style={{ left: `${pct(debrief.overall.median)}%` }} />
+              </div>
+              <p className="mt-3 max-w-[62ch] text-sm text-neutral-600">{debrief.methodNote}</p>
+            </div>
+          </div>
 
           {debrief.practiceFocus.length > 0 ? (
-            <>
-              <h3 className="mt-6 text-lg font-semibold text-plum-900">Practice focus</h3>
-              <ul className="mt-2 flex flex-wrap gap-2">
+            <div className="mt-10 rounded-xl border border-gold-600/40 bg-gold-100 p-5">
+              <h3 className="label text-plum-900">Practise these next</h3>
+              <ul className="mt-3 flex flex-wrap gap-2">
                 {debrief.practiceFocus.map((a) => (
                   <li
                     key={a.dimension}
-                    className="rounded-full bg-plum-100 px-3 py-1 text-sm font-medium text-plum-900"
+                    className="rounded-full bg-raised px-3 py-1 text-sm font-medium text-plum-900 shadow-sm"
                   >
                     {a.name}
                   </li>
                 ))}
               </ul>
-            </>
+            </div>
           ) : null}
 
-          <h3 className="mt-6 text-lg font-semibold text-plum-900">Every dimension</h3>
-          <ul className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
+          <h3 className="display mt-12 border-b border-rule pb-2 text-xl text-plum-900">
+            Every dimension
+          </h3>
+          <ul className="mt-5 grid grid-cols-1 gap-4 lg:grid-cols-2">
             {debrief.attributes.map((a) => (
               <li key={a.dimension}>
                 <ScoreWithInterval
@@ -259,10 +332,17 @@ export default function SessionPage({ params }: { params: Promise<{ id: string }
           </ul>
 
           {debrief.gaps.length > 0 ? (
-            <p className="mt-4 text-sm text-neutral-600">
-              No evidence collected for: {debrief.gaps.join(', ')}.
+            <p className="mt-6 border-l-2 border-rule-firm pl-4 text-sm text-neutral-600">
+              No evidence was collected for {debrief.gaps.join(', ')} — reported as a gap rather
+              than scored as zero.
             </p>
           ) : null}
+
+          <p className="mt-10">
+            <a href="/" className="btn btn-quiet">
+              Rehearse another loop
+            </a>
+          </p>
         </section>
       ) : null}
     </>

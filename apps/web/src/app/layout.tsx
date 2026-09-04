@@ -1,5 +1,5 @@
 import type { ReactElement, ReactNode } from 'react';
-import { Plus_Jakarta_Sans } from 'next/font/google';
+import { Plus_Jakarta_Sans, Instrument_Serif, JetBrains_Mono } from 'next/font/google';
 import { BRAND } from '@loopcraft/core';
 import { MobileNavToggle } from '../components/MobileNavToggle.js';
 import './globals.css';
@@ -21,6 +21,26 @@ const plusJakartaSans = Plus_Jakarta_Sans({
   display: 'swap',
 });
 
+/**
+ * The display face. Plus Jakarta Sans is a good interface font and a characterless
+ * headline -- one sans doing every job is the most reliable way to look generated. Instrument
+ * Serif carries the headline voice; it is upright, never italic.
+ */
+const instrumentSerif = Instrument_Serif({
+  subsets: ['latin'],
+  weight: '400',
+  variable: '--font-instrument-serif',
+  display: 'swap',
+});
+
+/** Scores, timings, round counts -- anything that lines up in a column or gets compared. */
+const jetbrainsMono = JetBrains_Mono({
+  subsets: ['latin'],
+  weight: ['400', '500'],
+  variable: '--font-jetbrains-mono',
+  display: 'swap',
+});
+
 const NAV_LINKS = [
   { href: '/', label: 'Prepare' },
   { href: '/dashboard', label: 'Progress' },
@@ -29,27 +49,34 @@ const NAV_LINKS = [
   { href: '/settings', label: 'Settings' },
 ] as const;
 
+const fontVars = `${plusJakartaSans.variable} ${instrumentSerif.variable} ${jetbrainsMono.variable}`;
+
 export default function RootLayout({ children }: { children: ReactNode }): ReactElement {
   return (
-    <html lang="en" className={plusJakartaSans.variable}>
-      <body className="min-h-screen bg-neutral-50 font-sans text-neutral-900 antialiased">
+    <html lang="en" className={fontVars}>
+      <body className="min-h-screen font-sans antialiased">
         <a className="skip-link" href="#main">
           Skip to main content
         </a>
 
-        <header className="border-b border-neutral-200 bg-white">
-          <div className="mx-auto flex max-w-5xl items-center justify-between px-4 py-4 sm:px-6">
-            <a href="/" className="text-lg font-bold text-plum-900">
+        {/* N9 edge-aligned: wordmark hard left, nav hard right, one hairline underneath. The
+            centred max-width bar with a pill button on the right is the AI-nav tell. */}
+        <header className="border-b border-rule bg-raised">
+          <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-4 py-3.5 sm:px-8">
+            <a
+              href="/"
+              className="display text-xl text-plum-900 transition-colors hover:text-plum-700"
+            >
               {BRAND.name}
             </a>
             <nav aria-label="Primary">
               <MobileNavToggle>
-                <ul className="flex flex-col gap-1 border-t border-neutral-200 px-4 py-2 md:flex-row md:gap-6 md:border-0 md:p-0">
+                <ul className="flex flex-col gap-0.5 border-t border-rule py-2 md:flex-row md:items-center md:gap-1 md:border-0 md:py-0">
                   {NAV_LINKS.map((link) => (
                     <li key={link.href}>
                       <a
                         href={link.href}
-                        className="block rounded-md px-2 py-2 text-sm font-medium text-neutral-600 hover:bg-plum-100 hover:text-plum-900 md:px-1 md:py-1"
+                        className="block whitespace-nowrap rounded px-2.5 py-2 text-sm font-medium text-neutral-600 transition-colors hover:bg-plum-100 hover:text-plum-900 md:py-1.5"
                       >
                         {link.label}
                       </a>
@@ -59,19 +86,28 @@ export default function RootLayout({ children }: { children: ReactNode }): React
               </MobileNavToggle>
             </nav>
           </div>
-          {/* Article 50: disclose that this is an AI system, prominently, not in a footnote. */}
-          <p className="ai-disclosure bg-plum-900 px-4 py-2 text-center text-xs font-medium text-white sm:px-6">
+          {/* Article 50: disclose that this is an AI system, prominently, not in a footnote.
+              Deliberately outside the collapsible region -- it is never folded into a menu. */}
+          <p className="ai-disclosure label border-t border-plum-900/15 bg-plum-900 px-4 py-1.5 text-center text-white sm:px-8">
             {BRAND.aiDisclosure}
           </p>
         </header>
 
-        <main id="main" className="mx-auto w-full max-w-5xl px-4 py-8 sm:px-6">
+        <main id="main" className="mx-auto w-full max-w-6xl px-4 py-10 sm:px-8 sm:py-14">
           {children}
         </main>
 
-        <footer className="border-t border-neutral-200 bg-white px-4 py-8 text-center text-sm text-neutral-600 sm:px-6">
-          <p className="mx-auto max-w-[70ch]">{BRAND.scoreDisclosure}</p>
-          <p className="mx-auto mt-2 max-w-[70ch]">{BRAND.affiliationDisclaimer}</p>
+        {/* Ft5 statement: the footer is two compliance sentences, so it is set as a statement
+            block rather than dressed up as a four-column link farm it has no links for. */}
+        <footer className="mt-20 border-t border-rule bg-raised">
+          <div className="mx-auto max-w-6xl px-4 py-12 sm:px-8">
+            <p className="display max-w-[24ch] text-2xl text-plum-900 sm:text-3xl">
+              {BRAND.scoreDisclosure}
+            </p>
+            <p className="mt-6 max-w-[70ch] border-l-2 border-gold-600 pl-4 text-sm text-neutral-600">
+              {BRAND.affiliationDisclaimer}
+            </p>
+          </div>
         </footer>
       </body>
     </html>

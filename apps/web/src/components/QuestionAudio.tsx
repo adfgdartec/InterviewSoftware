@@ -13,18 +13,21 @@ export interface QuestionAudioProps {
   readonly questionText: string;
 }
 
-type Status = 'idle' | 'loading' | 'playing' | 'blocked' | 'unavailable';
+type Status = 'idle' | 'loading' | 'playing' | 'ready' | 'blocked' | 'unavailable';
 
 /**
  * The interviewer's side of the conversation, spoken aloud. Fetches
  * GET /api/sessions/:id/speech (which returns Cartesia-synthesized MP3 bytes) whenever the
  * question changes, and plays it.
  *
+ * The native <audio controls> chrome is deliberately not used: a five-second clip needs a
+ * play control, not a scrubber, and the browser's light-grey player is the wrong object in a
+ * dark room. The <audio> element is still the thing that plays -- this only replaces its
+ * default UI with a single labelled button, which is a complete control for this clip.
+ *
  * Audio is an enhancement, never a blocker: the question text is on screen either way, so a
  * 503 (text-to-speech unconfigured) or a network failure renders nothing at all rather than
- * an error the candidate can do nothing about. The one failure worth surfacing is a browser
- * blocking autoplay before any user gesture, which is both expected on first load and fixable
- * by the candidate -- that one becomes a visible play button.
+ * an error the candidate can do nothing about.
  */
 export function QuestionAudio({ sessionId, questionText }: QuestionAudioProps): ReactElement | null {
   const [status, setStatus] = useState<Status>('idle');
@@ -77,9 +80,12 @@ export function QuestionAudio({ sessionId, questionText }: QuestionAudioProps): 
     };
   }, [sessionId, questionText]);
 
-  async function playFromGesture(): Promise<void> {
+  async function play(): Promise<void> {
+    const audio = audioRef.current;
+    if (audio === null) return;
     try {
-      await audioRef.current?.play();
+      audio.currentTime = 0;
+      await audio.play();
       setStatus('playing');
     } catch {
       setStatus('unavailable');
@@ -88,23 +94,39 @@ export function QuestionAudio({ sessionId, questionText }: QuestionAudioProps): 
 
   if (status === 'unavailable') return null;
 
+  const label =
+    status === 'loading'
+      ? 'Loading the question audio'
+      : status === 'playing'
+        ? 'Speaking…'
+        : status === 'blocked'
+          ? 'Play the question'
+          : 'Play it again';
+
   return (
-    <div className="mt-3">
-      {/* Controls stay available so the question can be replayed; the element is present in
-          every non-unavailable state because play() needs something to play from.
-          No <track> element: a caption track with no src is worse than none, and the audio's
-          full text alternative is the question itself, rendered verbatim directly above this
-          player and always visible. */}
-      <audio ref={audioRef} controls aria-label="Listen to the question" className="w-full max-w-sm" />
-      {status === 'blocked' ? (
-        <button
-          type="button"
-          onClick={() => void playFromGesture()}
-          className="mt-2 inline-flex items-center gap-2 rounded-md border border-plum-700 px-3 py-1.5 text-sm font-semibold text-plum-700 transition hover:bg-plum-100"
-        >
-          Play question
-        </button>
-      ) : null}
+    <div className="mt-8 flex items-center gap-3">
+      {/* No `controls`: the button below is this element's UI. */}
+      <audio
+        ref={audioRef}
+        onEnded={() => setStatus('ready')}
+        onPause={() => setStatus((s) => (s === 'playing' ? 'ready' : s))}
+      />
+      <button
+        type="button"
+        onClick={() => void play()}
+        disabled={status === 'loading'}
+        className="btn btn-quiet"
+      >
+        <span
+          aria-hidden="true"
+          className={
+            status === 'playing'
+              ? 'h-2 w-2 shrink-0 rounded-full bg-gold-600 motion-safe:animate-pulse'
+              : 'h-2 w-2 shrink-0 rounded-full bg-current opacity-40'
+          }
+        />
+        {label}
+      </button>
     </div>
   );
 }

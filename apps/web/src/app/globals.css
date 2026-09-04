@@ -1,33 +1,354 @@
 @import "tailwindcss";
 
+/* Hallmark · macrostructure: Catalogue · tone: technical-austere · anchor hue: plum 330deg
+ * theme: custom · vibe: "focused, high-stakes, quietly premium"
+ * paper oklch(98.5% 0.004 330) · accent oklch(40% 0.115 330) plum
+ * display Instrument Serif + body Plus Jakarta Sans + data JetBrains Mono
+ * axes: paper-band light / display-style classical-serif / accent-hue chromatic-plum
+ * nav: N9 edge-aligned · footer: Ft5 statement · enrichment: none (typography only)
+ * pre-emit critique: P5 H5 E4 S5 R4 V5
+ *
+ * The session route inverts to the "room" tokens below -- a deliberate in-app mode shift,
+ * not a second theme. An interview is a dark, focused, one-thing-at-a-time place; the rest
+ * of the product is a light workspace you browse. Same hue family, opposite ground.
+ */
+
 @theme {
   --font-sans: var(--font-plus-jakarta), system-ui, -apple-system, sans-serif;
+  --font-display: var(--font-instrument-serif), "Iowan Old Style", Georgia, serif;
+  --font-mono: var(--font-jetbrains-mono), ui-monospace, SFMono-Regular, monospace;
 
-  --color-plum-900: #3b1236;
-  --color-plum-700: #6b2c64;
-  --color-plum-100: #f3e8f1;
+  /* -- brand, restated in OKLCH. Names kept so untouched routes keep rendering. -- */
+  --color-plum-900: oklch(26% 0.085 330);
+  --color-plum-700: oklch(40% 0.115 330);
+  --color-plum-500: oklch(56% 0.105 330);
+  --color-plum-100: oklch(94.5% 0.018 330);
 
-  --color-gold-600: #c9a227;
-  --color-gold-100: #fbf3d9;
+  --color-gold-600: oklch(73% 0.13 85);
+  --color-gold-100: oklch(96% 0.04 92);
 
-  --color-neutral-900: #2a2229;
-  --color-neutral-600: #6b6169;
-  --color-neutral-200: #e8e1e6;
-  --color-neutral-50: #faf7f9;
+  --color-neutral-900: oklch(22% 0.03 330);
+  --color-neutral-600: oklch(52% 0.018 330);
+  --color-neutral-200: oklch(91% 0.008 330);
+  --color-neutral-50: oklch(98.5% 0.004 330);
 
-  --color-success: #2e7d4f;
-  --color-warning: #b5790a;
-  --color-danger: #b0392b;
+  --color-success: oklch(50% 0.11 150);
+  --color-warning: oklch(56% 0.115 75);
+  --color-danger: oklch(52% 0.165 27);
+
+  /* -- surfaces the redesign introduces -- */
+  --color-paper: oklch(98.5% 0.004 330);
+  --color-raised: oklch(100% 0 0);
+  --color-sunk: oklch(96.2% 0.006 330);
+  --color-rule: oklch(91% 0.008 330);
+  --color-rule-firm: oklch(84% 0.014 330);
+
+  /* -- the room -- */
+  --color-room-floor: oklch(16% 0.022 330);
+  --color-room-wall: oklch(20.5% 0.026 330);
+  --color-room-stage: oklch(25% 0.032 330);
+  --color-room-ink: oklch(96% 0.008 330);
+  --color-room-ink-2: oklch(72% 0.016 330);
+  --color-room-rule: oklch(31% 0.032 330);
+
+  --text-display: clamp(2.75rem, 6.5vw, 4.25rem);
+  --text-display-s: clamp(2rem, 4.5vw, 2.875rem);
+
+  --ease-out: cubic-bezier(0.2, 0.7, 0.3, 1);
+  --ease-in-out: cubic-bezier(0.6, 0, 0.3, 1);
+}
+
+:root {
+  --dur-fast: 120ms;
+  --dur: 180ms;
+  --hairline: 1px solid var(--color-rule);
+}
+
+html,
+body {
+  overflow-x: clip;
 }
 
 body {
   font-family: var(--font-sans);
+  background: var(--color-paper);
+  color: var(--color-neutral-900);
+  -webkit-font-smoothing: antialiased;
 }
 
 h1,
 h2,
 h3 {
   text-wrap: balance;
+  overflow-wrap: anywhere;
+  min-width: 0;
+}
+
+/* Display type is roman throughout. Emphasis is carried by weight and the gold rule,
+   never by an italic heading. */
+.display {
+  font-family: var(--font-display);
+  font-style: normal;
+  font-weight: 400;
+  letter-spacing: -0.015em;
+  line-height: 1.04;
+}
+
+/* Numbers that sit in columns or get compared across rows. */
+.data {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
+}
+
+.label {
+  font-family: var(--font-mono);
+  font-size: 0.6875rem;
+  font-weight: 500;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+/* One focus treatment for the whole product. Never animated -- a ring that fades in is a
+   ring that isn't there when the key is pressed. */
+:where(a, button, input, textarea, select, summary, [tabindex]):focus-visible {
+  outline: 2px solid var(--color-gold-600);
+  outline-offset: 2px;
+  border-radius: 3px;
+}
+
+::selection {
+  background: var(--color-plum-100);
+  color: var(--color-plum-900);
+}
+
+/* ---------------------------------------------------------------- the room
+   Scoped to the session route via a wrapper class rather than a media query or a global
+   dark theme: this is one route deliberately inverting, not a user preference. */
+.room {
+  background: var(--color-room-floor);
+  color: var(--color-room-ink);
+}
+.room ::selection {
+  background: var(--color-plum-500);
+  color: var(--color-room-ink);
+}
+.room :where(a, button, input, textarea, select, summary, [tabindex]):focus-visible {
+  outline-color: var(--color-gold-600);
+}
+
+/* The single light source in the room: a soft wash behind the question, so the stage reads
+   as lit rather than as another card. Two stops, no orb, no blob. */
+.room-stage {
+  background:
+    radial-gradient(120% 90% at 50% 0%, oklch(28% 0.04 330) 0%, transparent 62%),
+    var(--color-room-wall);
+}
+
+/* ---------------------------------------------------------------- controls */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  border-radius: 6px;
+  padding: 0.625rem 1.125rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+  line-height: 1.2;
+  white-space: nowrap;
+  transition:
+    background-color var(--dur) var(--ease-out),
+    transform var(--dur-fast) var(--ease-out),
+    opacity var(--dur) var(--ease-out);
+}
+.btn:active:not(:disabled) {
+  transform: translateY(1px);
+}
+.btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.btn-primary {
+  background: var(--color-plum-700);
+  color: white;
+}
+.btn-primary:hover:not(:disabled) {
+  background: var(--color-plum-900);
+}
+
+.btn-quiet {
+  background: transparent;
+  color: var(--color-plum-700);
+  box-shadow: inset 0 0 0 1px var(--color-rule-firm);
+}
+.btn-quiet:hover:not(:disabled) {
+  background: var(--color-plum-100);
+}
+
+.room .btn-primary {
+  background: var(--color-gold-600);
+  color: oklch(20% 0.03 85);
+}
+.room .btn-primary:hover:not(:disabled) {
+  background: oklch(80% 0.13 85);
+}
+.room .btn-quiet {
+  color: var(--color-room-ink);
+  box-shadow: inset 0 0 0 1px var(--color-room-rule);
+}
+.room .btn-quiet:hover:not(:disabled) {
+  background: var(--color-room-stage);
+}
+
+/* ---------------------------------------------------------------- catalogue card
+   Not a card-in-card: one border, one ground, and a gold rule that appears on hover to
+   mark the row you're on. The lift is 2px -- enough to read as raised, not as a pop. */
+.entry {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  background: var(--color-raised);
+  border: var(--hairline);
+  border-radius: 10px;
+  transition:
+    transform var(--dur) var(--ease-out),
+    border-color var(--dur) var(--ease-out);
+}
+.entry::before {
+  content: "";
+  position: absolute;
+  inset: -1px -1px auto -1px;
+  height: 2px;
+  border-radius: 10px 10px 0 0;
+  background: var(--color-gold-600);
+  opacity: 0;
+  transition: opacity var(--dur) var(--ease-out);
+}
+.entry:hover {
+  transform: translateY(-2px);
+  border-color: var(--color-rule-firm);
+}
+.entry:hover::before {
+  opacity: 1;
+}
+
+/* The spec strip: track / level / rounds / minutes as a rule-separated row of data, not a
+   sentence with middots. Reads as a specification because that is what it is. */
+.spec {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0 1px;
+  background: var(--color-rule);
+  border-block: var(--hairline);
+}
+.spec > * {
+  flex: 1 1 auto;
+  min-width: 0;
+  background: var(--color-sunk);
+  padding: 0.5rem 0.875rem;
+}
+.spec dt {
+  display: block;
+  font-family: var(--font-mono);
+  font-size: 0.625rem;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--color-neutral-600);
+}
+.spec dd {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: 0.875rem;
+  font-variant-numeric: tabular-nums;
+  color: var(--color-neutral-900);
+}
+
+/* Round breakdown as a timeline rather than an ordered list of sentences. */
+.timeline {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.timeline li {
+  display: grid;
+  grid-template-columns: 1.5rem 1fr;
+  gap: 0 0.75rem;
+  padding: 0.4rem 0;
+  border-top: var(--hairline);
+}
+.timeline li:first-child {
+  border-top: 0;
+}
+.timeline .n {
+  font-family: var(--font-mono);
+  font-size: 0.6875rem;
+  color: var(--color-plum-500);
+  padding-top: 0.15rem;
+}
+
+/* Score bar. The fill is the median; the lighter band behind it is the interval, so the
+   uncertainty is drawn rather than merely printed. */
+.gauge {
+  position: relative;
+  height: 6px;
+  border-radius: 3px;
+  background: var(--color-sunk);
+  overflow: hidden;
+}
+.gauge-band {
+  position: absolute;
+  inset-block: 0;
+  background: var(--color-plum-100);
+}
+.gauge-mark {
+  position: absolute;
+  inset-block: 0;
+  width: 2px;
+  background: var(--color-plum-700);
+}
+.room .gauge {
+  background: var(--color-room-stage);
+}
+.room .gauge-band {
+  background: oklch(38% 0.06 330);
+}
+.room .gauge-mark {
+  background: var(--color-gold-600);
+}
+
+/* Round progress ticks in the room's header. */
+.ticks {
+  display: flex;
+  gap: 4px;
+}
+.ticks i {
+  display: block;
+  width: 1.75rem;
+  height: 3px;
+  border-radius: 2px;
+  background: var(--color-room-rule);
+}
+.ticks i[data-done="true"] {
+  background: var(--color-gold-600);
+}
+.ticks i[data-current="true"] {
+  background: var(--color-room-ink-2);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+  .entry:hover {
+    transform: none;
+  }
 }
 
 /*
@@ -43,7 +364,7 @@ h3 {
   left: 0.5rem;
   top: 0.5rem;
   z-index: 50;
-  border-radius: 0.375rem;
+  border-radius: 6px;
   background: var(--color-plum-900);
   padding: 0.5rem 1rem;
   color: white;
