@@ -39,11 +39,28 @@ function demoSampler(): GraderSampler {
       const rubricId = /Rubric (\S+) /.exec(prompt)?.[1] ?? '';
       const rubric = rubricById(rubricId);
       if (rubric === undefined) return {};
+
+      // A REAL span of the candidate's answer, lifted out of the prompt the sampler was
+      // given. This fixture used to fabricate `I would start by establishing the constraints
+      // for ${d.id}` -- text that appeared nowhere in the transcript -- and the debrief then
+      // rendered it under "Quoted from your answer". The grader contract now rejects a quote
+      // it cannot find in the answer, so a fixture that invents one no longer passes, which
+      // is the point: the double has to satisfy the same contract the real grader does.
+      const answer = (prompt.split('Transcript:\n')[1] ?? '')
+        .split('\n')
+        .filter((line) => !line.trimStart().startsWith('Q:'))
+        .map((line) => line.replace(/^\s*A:\s*/, ''))
+        .join(' ')
+        .trim();
+      const sentences = answer.split(/(?<=[.!?])\s+/).filter((x) => x.trim().length > 0);
+
       return {
         dimensions: rubric.dimensions.map((d, i) => ({
           dimension: d.id,
           level: Math.min(5, Math.max(1, 3 + ((i + sampleIndex) % 3) - 1)),
-          evidenceQuote: `I would start by establishing the constraints for ${d.id}.`,
+          // Rotate through the answer's own sentences so different dimensions cite
+          // different evidence, as a real grader would.
+          evidenceQuote: sentences[i % Math.max(1, sentences.length)] ?? answer,
         })),
       };
     },

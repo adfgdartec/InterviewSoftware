@@ -12,10 +12,25 @@ export const GRADER_SAMPLE_COUNT = 3;
 export const GRADER_TEMPERATURE = 0.3;
 export const GRADER_PROMPT_VERSION = 'anchored-v1';
 
+/**
+ * Models routinely emit `"level": "3"` -- the right verdict, wrapped in the wrong JSON type.
+ * Rejecting those samples discarded roughly a third of real grades, which cost money and,
+ * worse, narrowed the sample count the interval is computed from without saying so.
+ *
+ * Normalising a numeric string to a number is NOT the same as repairing a bad grade: the
+ * value is untouched, only its encoding. Anything that is not a clean integer string is left
+ * alone and fails validation as before, and a sample that scores a dimension the rubric does
+ * not have is still discarded rather than salvaged.
+ */
+const levelValue = z.preprocess(
+  (raw) => (typeof raw === 'string' && /^\s*\d+\s*$/.test(raw) ? Number(raw.trim()) : raw),
+  z.number().int().min(1).max(5),
+);
+
 /** One dimension's verdict from one sample. The quote is what makes the score auditable. */
 export const dimensionVerdict = z.object({
   dimension: z.string().min(1),
-  level: z.number().int().min(1).max(5),
+  level: levelValue,
   evidenceQuote: z.string().min(1).max(600),
 });
 
@@ -52,7 +67,11 @@ export function buildGraderPrompt(rubric: Rubric, transcript: string): string {
     '',
     'Rules:',
     '- Score only against the anchors below. Do not invent dimensions.',
-    '- Base every score on what the candidate said or did, quoted from the transcript.',
+    '- evidenceQuote MUST be a verbatim span copied from an "A:" line of the transcript.',
+    '  Copy the candidate\'s exact words. Do NOT summarise, paraphrase, or describe what they',
+    '  did, and do NOT restate the anchor text above -- those are the levels, not the evidence.',
+    '  If a dimension has no supporting words in the transcript, quote the closest thing the',
+    '  candidate actually said and score the low level it evidences.',
     '- Do not describe or infer the candidate\'s internal state. If you cannot quote evidence',
     '  for a level, score the level you can evidence.',
     '- Do not comment on hiring outcomes, suitability, or the likelihood of an offer.',
@@ -84,8 +103,45 @@ export interface RoundGrade {
   readonly samplesCollected: number;
 }
 
-/** Validates one raw sample against the contract and the rubric's declared dimensions. */
-export function parseSample(raw: unknown, rubric: Rubric): GraderResponse {
+/**
+ * Normalises text for the verbatim-quote check: models re-wrap lines, change straight quotes
+ * to curly ones, and collapse whitespace differently from the transcript they were given.
+ * None of those make a quote less verbatim, so none of them should fail the check.
+ */
+function normalizeForQuoteCheck(text: string): string {
+  return text
+    .toLowerCase()
+    .replace(/[\u2018\u2019]/g, "'")
+    .replace(/[\u201c\u201d]/g, '"')
+    .replace(/[\u2013\u2014]/g, '-')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+/**
+ * The candidate's own words, with the interviewer's stripped out. `transcriptForRound`
+ * formats turns as "Q: ...\nA: ...", and a quote lifted from a Q line would credit the
+ * candidate with the interviewer's phrasing.
+ */
+function answerText(transcript: string): string {
+  return transcript
+    .split('\n')
+    .filter((line) => !line.trimStart().startsWith('Q:'))
+    .map((line) => line.replace(/^\s*A:\s*/, ''))
+    .join(' ');
+}
+
+/**
+ * Validates one raw sample against the contract and the rubric's declared dimensions.
+ *
+ * When `transcript` is supplied, every evidenceQuote must actually appear in what the
+ * candidate said. Observed in a live run before this existed: the grader returned polished
+ * restatements of the RUBRIC ANCHORS ("Traced a request end to end, naming what is written
+ * and what is read at each hop") for answers that said nothing of the kind -- and the debrief
+ * rendered them under the heading "Quoted from your answer". A prompt instruction alone did
+ * not stop it, so this is a check rather than a hope.
+ */
+export function parseSample(raw: unknown, rubric: Rubric, transcript?: string): GraderResponse {
   const parsed = graderResponse.safeParse(raw);
   if (!parsed.success) {
     throw new GraderContractError(
@@ -103,6 +159,14 @@ export function parseSample(raw: unknown, rubric: Rubric): GraderResponse {
       throw new GraderContractError(
         `Grader emitted the dimension "${verdict.dimension}", which infers an internal state.`,
       );
+    }
+    if (transcript !== undefined) {
+      const haystack = normalizeForQuoteCheck(answerText(transcript));
+      if (!haystack.includes(normalizeForQuoteCheck(verdict.evidenceQuote))) {
+        throw new GraderContractError(
+          `Grader evidence for "${verdict.dimension}" is not a verbatim quote from the answer.`,
+        );
+      }
     }
     if (findBannedTokensInText(verdict.evidenceQuote).length > 0) {
       // The quote is the candidate's own words, so this fires when the grader paraphrased
@@ -138,7 +202,9 @@ export async function gradeRound(
   const collected: GraderResponse[] = [];
   for (let i = 0; i < sampleCount; i += 1) {
     try {
-      collected.push(parseSample(await sampler.sample(prompt, GRADER_TEMPERATURE, i + 1), rubric));
+      collected.push(
+        parseSample(await sampler.sample(prompt, GRADER_TEMPERATURE, i + 1), rubric, transcript),
+      );
     } catch (error) {
       if (!(error instanceof GraderContractError)) throw error;
     }

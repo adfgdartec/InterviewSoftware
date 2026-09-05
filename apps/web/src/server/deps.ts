@@ -2,6 +2,8 @@ import { ITEM_BANK, itemsFor, loopTemplateById } from '@loopcraft/core';
 import { appClient, ownerClient, DEV_PLAN_ID } from '@loopcraft/db';
 import { demoGenerator } from './demo.js';
 import { heuristicGraderSampler } from './heuristic-grader.js';
+import { llmGraderSampler } from './llm-grader.js';
+import { llmQuestionGenerator } from './llm-question-generator.js';
 import { PostgresRateLimiter } from './rate-limit.js';
 import { demoIdentity, demoIdentityAllowed } from './dev-identity.js';
 import { postgresEntitlementStore } from './entitlement-store.js';
@@ -74,12 +76,18 @@ export async function buildRouteDeps(): Promise<RouteDeps> {
     rateLimiter,
     templates: { byId: loopTemplateById },
     items: { itemsFor },
-    generator: demoGenerator(ITEM_BANK),
+    // A real model writes the question against the round's own rubric; the deterministic
+    // demo generator is the fallback when no provider is configured. `selectQuestion` still
+    // validates and still falls back to the curated catalog when generation is rejected.
+    generator: llmQuestionGenerator() ?? demoGenerator(ITEM_BANK),
     sql,
     turnsPerRound: 1,
     costCeilingCents: 500,
     generationTimeoutMs: 8_000,
-    graderSampler: heuristicGraderSampler(),
+    // Real grading. heuristicGraderSampler scored on string length and whether the answer
+    // contained a digit, which is why every debrief read the same number down the page. It
+    // stays as the last resort so an unconfigured environment degrades rather than 503s.
+    graderSampler: llmGraderSampler() ?? heuristicGraderSampler(),
     interviewerEnabled: true,
   };
 }

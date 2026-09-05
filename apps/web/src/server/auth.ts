@@ -78,9 +78,16 @@ export async function authenticateWith(ports: AuthPorts): Promise<AuthedUser | n
       privacyVersion: str(meta, 'privacy_version') ?? PRIVACY_VERSION,
       planId: ports.planId,
     });
-  } catch {
-    // A refused signup (age/region) or a provisioning failure must read as "not signed in",
-    // never as a 500 that leaves a half-made account looking usable.
+  } catch (error) {
+    // A refused signup (age/region) or a provisioning failure must read as "not signed in"
+    // to the caller, never as a 500 that leaves a half-made account looking usable.
+    //
+    // But it must NOT be silent. Swallowing this produced the worst possible symptom during
+    // development: sign-in succeeded, the middleware saw a valid session and let the user
+    // through, and then every API route answered 401 with nothing anywhere saying why. The
+    // actual cause was a database two migrations behind. One log line is the difference
+    // between a five-minute diagnosis and an afternoon.
+    console.error('[auth] could not provision the authenticated identity:', error);
     return null;
   } finally {
     await owner.end({ timeout: 5 });
