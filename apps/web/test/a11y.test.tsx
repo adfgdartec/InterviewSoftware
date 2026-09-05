@@ -17,6 +17,10 @@ import PrepPage from '../src/app/page.js';
 import CalibrationPage from '../src/app/calibration/page.js';
 import CompliancePage from '../src/app/compliance/page.js';
 import SettingsPage from '../src/app/settings/page.js';
+import SignInPage from '../src/app/signin/page.js';
+import SignUpPage from '../src/app/signup/page.js';
+import ResetPage from '../src/app/auth/reset/page.js';
+import ResetConfirmPage from '../src/app/auth/reset/confirm/page.js';
 import { Dashboard } from '../src/components/Dashboard.js';
 import { AbilityReadout, ScoreWithInterval } from '../src/components/ScoreWithInterval.js';
 
@@ -92,6 +96,13 @@ function describeViolations(violations: readonly axe.Result[]): string {
   return violations.map((v) => `${v.impact}: ${v.id} — ${v.help}`).join('\n');
 }
 
+/**
+ * The auth pages are async Server Components that await `searchParams`. Rendering them to
+ * static markup for the audit means resolving that promise up front; an empty object is the
+ * default state of every one of them.
+ */
+const EMPTY_PARAMS = Promise.resolve({});
+
 const SAMPLE_DASHBOARD = (
   <Dashboard
     abilities={[
@@ -122,13 +133,21 @@ const SAMPLE_DASHBOARD = (
 );
 
 describe('primary routes have zero critical or serious axe violations', () => {
+  // Thunks, not elements: the auth pages are async Server Components, and
+  // renderToStaticMarkup cannot await one. Calling the function returns the promise its JSX
+  // resolves from, which the test body awaits before rendering.
   it.each([
-    ['prep', <PrepPage key="p" />],
-    ['calibration', <CalibrationPage key="c" />],
-    ['compliance', <CompliancePage key="x" />],
-    ['settings', <SettingsPage key="s" />],
-    ['dashboard', SAMPLE_DASHBOARD],
-  ])('%s', async (_name, element) => {
+    ['prep', () => <PrepPage />],
+    ['calibration', () => <CalibrationPage />],
+    ['compliance', () => <CompliancePage />],
+    ['settings', () => <SettingsPage />],
+    ['dashboard', () => SAMPLE_DASHBOARD],
+    ['sign in', () => SignInPage({ searchParams: EMPTY_PARAMS })],
+    ['sign up', () => SignUpPage({ searchParams: EMPTY_PARAMS })],
+    ['password reset', () => ResetPage({ searchParams: EMPTY_PARAMS })],
+    ['password reset confirm', () => ResetConfirmPage()],
+  ])('%s', async (_name, render) => {
+    const element = await render();
     const violations = await auditHtml(documentFor(element));
     const blocking = critical(violations);
     expect(describeViolations(blocking)).toBe('');

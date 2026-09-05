@@ -2,6 +2,8 @@ import type { ReactElement, ReactNode } from 'react';
 import { Plus_Jakarta_Sans, Instrument_Serif, JetBrains_Mono } from 'next/font/google';
 import { BRAND } from '@loopcraft/core';
 import { MobileNavToggle } from '../components/MobileNavToggle.js';
+import { currentUser } from '../server/deps.js';
+import { signOut } from './auth/actions.js';
 import './globals.css';
 
 /**
@@ -51,7 +53,9 @@ const NAV_LINKS = [
 
 const fontVars = `${plusJakartaSans.variable} ${instrumentSerif.variable} ${jetbrainsMono.variable}`;
 
-export default function RootLayout({ children }: { children: ReactNode }): ReactElement {
+export default async function RootLayout({ children }: { children: ReactNode }): Promise<ReactElement> {
+  // Resolved server-side so a signed-out visitor never sees signed-in chrome flash first.
+  const user = await currentUser();
   return (
     <html lang="en" className={fontVars}>
       <body className="min-h-screen font-sans antialiased">
@@ -85,6 +89,17 @@ export default function RootLayout({ children }: { children: ReactNode }): React
                 </ul>
               </MobileNavToggle>
             </nav>
+            {user === null ? (
+              <a href="/signin" className="btn btn-quiet hidden md:inline-flex">
+                Sign in
+              </a>
+            ) : (
+              <form action={signOut} className="hidden md:block">
+                <button type="submit" className="btn btn-quiet">
+                  Sign out
+                </button>
+              </form>
+            )}
           </div>
           {/* Article 50: disclose that this is an AI system, prominently, not in a footnote.
               Deliberately outside the collapsible region -- it is never folded into a menu. */}

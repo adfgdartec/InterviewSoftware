@@ -5,12 +5,18 @@ import { DEV_PLAN_ID } from '@loopcraft/db';
 import type { AuthedUser } from './guards.js';
 
 /**
- * Dev-mode identity. There is no login UI or Supabase auth wired yet (recorded as a known
- * gap in docs/DELIVERY.md); this is what lets a browser actually use the product without
- * one. It is not fake auth: the cookie names a REAL row in `users`, a REAL row in `orgs`,
- * and a REAL active entitlement, provisioned once per browser. Every session, RLS check and
- * entitlement resolution downstream is exercised for real against that row -- only the
- * "how do you prove who you are" step is a cookie instead of a password.
+ * Dev-mode identity, retained for local demos ONLY.
+ *
+ * It is not fake auth: the cookie names a REAL row in `users`, a REAL row in `orgs`, and a
+ * REAL active entitlement, provisioned once per browser. That is exactly why it must never
+ * reach production -- on a public URL it hands every visitor an entitled account and, with
+ * real provider keys configured, free billable transcription and synthesis.
+ *
+ * Two locks, because one is a comment and comments do not execute:
+ *   - it runs only when LOOPCRAFT_DEV_IDENTITY=1 is explicitly set, and
+ *   - it throws outright when NODE_ENV === 'production', flag or no flag.
+ *
+ * `deps.ts` prefers real Supabase auth whenever it is configured and only falls back here.
  *
  * Provisioning runs on the owner connection because inserting a brand-new user's own first
  * rows is exactly the boundary case RLS cannot authorize yet (there is no membership row to
@@ -48,7 +54,26 @@ async function findExisting(sql: Sql, userId: string): Promise<AuthedUser | null
  * Reads the identity cookie, provisions a fresh demo user+org if it is missing or stale,
  * and (re)sets the cookie. Safe to call on every request; provisioning only runs once.
  */
+export class DemoIdentityForbiddenError extends Error {
+  constructor(reason: string) {
+    super(`Demo identity refused: ${reason}`);
+    this.name = 'DemoIdentityForbiddenError';
+  }
+}
+
+/** True only when the flag is set AND we are not in production. Exported so a test can assert it. */
+export function demoIdentityAllowed(): boolean {
+  if (process.env['NODE_ENV'] === 'production') return false;
+  return process.env['LOOPCRAFT_DEV_IDENTITY'] === '1';
+}
+
 export async function demoIdentity(): Promise<AuthedUser> {
+  if (process.env['NODE_ENV'] === 'production') {
+    throw new DemoIdentityForbiddenError('NODE_ENV is production. Real authentication is required.');
+  }
+  if (process.env['LOOPCRAFT_DEV_IDENTITY'] !== '1') {
+    throw new DemoIdentityForbiddenError('LOOPCRAFT_DEV_IDENTITY is not set to 1.');
+  }
   const jar = await cookies();
   const existingId = jar.get(COOKIE_NAME)?.value;
 

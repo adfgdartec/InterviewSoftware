@@ -224,6 +224,13 @@ No provider keys are needed: every test mocks its providers and demo mode is det
    real microphone has never been exercised — no audio input device exists in the build
    environment. The provider call it makes is verified; the capture that feeds it is not.
 
+18. ~~**No authentication.**~~ **Closed 2026-09-04.** Real Supabase Auth: email + password with
+    confirmation, Google OAuth, a server-side age and jurisdiction gate at signup, and a
+    stored, versioned record of terms acceptance. `demoIdentity` now throws in production and
+    requires `LOOPCRAFT_DEV_IDENTITY=1` otherwise. `/compliance`'s sentence "Accounts are
+    gated at 13+, and 16+ in the EU" is true as of this change. Remaining limits: the Google
+    OAuth round trip and email delivery are unverified here (no Cloud credentials, no inbox).
+
 **Verification debt**
 
 4. Colour contrast is unverified; jsdom cannot sample pixels. Needs a real browser.
@@ -237,7 +244,8 @@ No provider keys are needed: every test mocks its providers and demo mode is det
    engine still uses catalog order. `item_stats.response_count` is 0 for all 124 items.
 10. No Stripe integration. Flows, consent and cancellation are modelled and tested; no
     payment processor is connected.
-11. No account-deletion job (acceptance criterion 10).
+11. No account-deletion job (acceptance criterion 10). `users.deleted_at` exists and
+    `findIdentity` already refuses a soft-deleted user, but nothing purges rows or files.
 12. No Playwright e2e; the `e2e/` workspace from spec §3.1 does not exist.
 13. Per-track domain rubrics: 11 of 12 tracks share one domain rubric.
 14. Rate limiter is in-process — correct for one node, wrong for several.

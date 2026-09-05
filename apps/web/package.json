@@ -16,14 +16,16 @@
     "@loopcraft/core": "workspace:*",
     "@loopcraft/db": "workspace:*",
     "@loopcraft/providers": "workspace:*",
+    "@loopcraft/sandbox": "workspace:*",
     "@loopcraft/scoring": "workspace:*",
     "@mediapipe/tasks-vision": "1.0.1",
+    "@supabase/ssr": "^0.12.6",
+    "@supabase/supabase-js": "^2.115.0",
     "next": "15.5.4",
     "postgres": "3.4.7",
     "react": "19.1.1",
     "react-dom": "19.1.1",
-    "zod": "3.25.76",
-    "@loopcraft/sandbox": "workspace:*"
+    "zod": "3.25.76"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "4.3.3",
