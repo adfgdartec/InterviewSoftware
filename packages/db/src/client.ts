@@ -12,9 +12,23 @@ export function appClient(url: string = appUrl()): Sql {
   return postgres(url, { max: 10, onnotice: () => {}, connection: { search_path: 'public' } });
 }
 
-/** Owner connection: bypasses RLS. Only migrations, seeds and retention jobs may use it. */
-export function ownerClient(url: string = ownerUrl()): Sql {
-  return postgres(url, { max: 4, onnotice: () => {}, connection: { search_path: 'public' } });
+/**
+ * Owner connection: bypasses RLS. Only migrations, seeds, retention jobs and first-signup
+ * provisioning may use it.
+ *
+ * `max` is a parameter because the callers want very different things. A migration wants a
+ * few connections; per-request provisioning wants exactly ONE, because it opens a pool, runs
+ * a single short transaction and closes it again. Opening four for that exhausted the
+ * Supabase session pooler (15 clients) under a burst of sign-ins -- observed as
+ * `EMAXCONNSESSION` taking down every route, not just the one provisioning.
+ */
+export function ownerClient(url: string = ownerUrl(), max = 4): Sql {
+  return postgres(url, { max, onnotice: () => {}, connection: { search_path: 'public' } });
+}
+
+/** One connection, for a single short transaction on a request path. */
+export function provisioningClient(): Sql {
+  return ownerClient(ownerUrl(), 1);
 }
 
 /**

@@ -1,5 +1,5 @@
 import { ITEM_BANK, itemsFor, loopTemplateById } from '@loopcraft/core';
-import { appClient, ownerClient, DEV_PLAN_ID } from '@loopcraft/db';
+import { appClient, provisioningClient, DEV_PLAN_ID } from '@loopcraft/db';
 import { demoGenerator } from './demo.js';
 import { heuristicGraderSampler } from './heuristic-grader.js';
 import { llmGraderSampler } from './llm-grader.js';
@@ -44,7 +44,8 @@ async function authenticate(): Promise<AuthedUser | null> {
     return authenticateWith({
       supabase: (await serverClient()).auth,
       sql,
-      owner: ownerClient,
+      // One connection, closed immediately after the single provisioning transaction.
+      owner: provisioningClient,
       planId: DEV_PLAN_ID,
     });
   }
