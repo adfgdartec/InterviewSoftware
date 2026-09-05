@@ -57,24 +57,56 @@ export const INTERVIEWER_VOICE_ID = 'b24f41fd-00a3-4cd8-992a-a0c9f13f3ef1';
 const CARTESIA_MODEL_ID = 'sonic-2';
 
 /**
- * Exact-match, process-lifetime cache. Synthesis is billed per character and an interview
- * question is re-fetched every time the candidate reloads the page on the same turn, which is
- * the exact redundancy this guards against. Deliberately NOT the second brain's embedding
- * `SemanticCache`: two questions that are semantically close still need different audio, so
- * "close enough" is the wrong match rule for speech. A restart clears it, which is fine --
- * the cost being avoided is within one process's uptime, not across deploys.
+ * Where synthesized audio is remembered between requests.
+ *
+ * Exact-match, never semantic: two questions that are close in meaning still need different
+ * audio, so the embedding `SemanticCache` used for completions is the wrong tool here.
+ *
+ * The default is an in-process Map, which is correct for a single Node process and useless
+ * on Workers -- every isolate starts empty, so nearly every request re-synthesizes and
+ * re-bills. `setSynthesisCache` lets the deployment supply shared storage (KV) instead. The
+ * interface is deliberately the smallest thing KV can satisfy.
  */
-const cache = new Map<string, Uint8Array>();
+export interface SynthesisCache {
+  get(text: string): Promise<Uint8Array | undefined>;
+  set(text: string, audio: Uint8Array): Promise<void>;
+}
+
+class InMemorySynthesisCache implements SynthesisCache {
+  private readonly entries = new Map<string, Uint8Array>();
+  async get(text: string): Promise<Uint8Array | undefined> {
+    return this.entries.get(text);
+  }
+  async set(text: string, audio: Uint8Array): Promise<void> {
+    this.entries.set(text, audio);
+  }
+  clear(): void {
+    this.entries.clear();
+  }
+}
+
+let cache: SynthesisCache = new InMemorySynthesisCache();
+
+/**
+ * Swaps in shared storage. Called once at startup by the deployment; a cache that throws
+ * must never take synthesis down with it, so failures are swallowed at the call sites below
+ * rather than here.
+ */
+export function setSynthesisCache(next: SynthesisCache): void {
+  cache = next;
+}
 
 /** Test seam: drops the cache so a cache-hit assertion cannot be polluted by a prior test. */
 export function clearSynthesisCache(): void {
-  cache.clear();
+  if (cache instanceof InMemorySynthesisCache) cache.clear();
+  else cache = new InMemorySynthesisCache();
 }
 
 /** Synthesizes one line of interviewer dialogue. Returns raw MP3 bytes. */
 export async function synthesize(text: string, timeoutMs = 30_000): Promise<Uint8Array> {
   if (text.trim() === '') throw new RangeError('Cannot synthesize empty text.');
-  const cached = cache.get(text);
+  // A cache that is down must cost money, not availability: fall through to synthesis.
+  const cached = await cache.get(text).catch(() => undefined);
   if (cached !== undefined) return cached;
 
   const controller = new AbortController();
@@ -97,7 +129,7 @@ export async function synthesize(text: string, timeoutMs = 30_000): Promise<Uint
     });
     if (!res.ok) throw new CartesiaRequestError(res.status, await res.text());
     const bytes = new Uint8Array(await res.arrayBuffer());
-    cache.set(text, bytes);
+    await cache.set(text, bytes).catch(() => {});
     return bytes;
   } catch (error) {
     if (error instanceof CartesiaKeyMissingError || error instanceof CartesiaRequestError) throw error;

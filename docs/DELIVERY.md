@@ -248,7 +248,9 @@ No provider keys are needed: every test mocks its providers and demo mode is det
     `findIdentity` already refuses a soft-deleted user, but nothing purges rows or files.
 12. No Playwright e2e; the `e2e/` workspace from spec §3.1 does not exist.
 13. Per-track domain rubrics: 11 of 12 tracks share one domain rubric.
-14. Rate limiter is in-process — correct for one node, wrong for several.
+14. ~~Rate limiter is in-process~~ **Closed 2026-09-05.** `PostgresRateLimiter`
+    (migration 0009) shares state across every process and isolate, holds under
+    concurrency via one atomic upsert, and fails closed when the database is down.
 15. Idempotency keys are enforced but not yet replayed from `idempotency_keys`.
 16. FSRS uses published default weights — population priors, **not** optimized on Loopcraft
     data.

@@ -2,11 +2,13 @@ import { ITEM_BANK, itemsFor, loopTemplateById } from '@loopcraft/core';
 import { appClient, ownerClient, DEV_PLAN_ID } from '@loopcraft/db';
 import { demoGenerator } from './demo.js';
 import { heuristicGraderSampler } from './heuristic-grader.js';
-import { FixedWindowRateLimiter } from './rate-limit.js';
+import { PostgresRateLimiter } from './rate-limit.js';
 import { demoIdentity, demoIdentityAllowed } from './dev-identity.js';
 import { postgresEntitlementStore } from './entitlement-store.js';
 import { authenticateWith } from './auth.js';
 import { serverClient, supabaseConfigured } from './supabase.js';
+import { KVSynthesisCache, resolveKVBinding } from './synthesis-cache.js';
+import { setSynthesisCache } from '@loopcraft/providers';
 import type { AuthedUser } from './guards.js';
 import type { RouteDeps } from './routes.js';
 
@@ -16,7 +18,14 @@ import type { RouteDeps } from './routes.js';
  * outlive a single request.
  */
 const sql = appClient();
-const rateLimiter = new FixedWindowRateLimiter(120, 60_000);
+
+/**
+ * Shared, not per-process. The previous in-memory limiter enforced nothing once the app ran
+ * in more than one process -- and on Workers every isolate is another process. This one is
+ * the only thing standing between an account and unbounded Deepgram/Cartesia spend, so it
+ * has to count across all of them.
+ */
+const rateLimiter = new PostgresRateLimiter(sql, 120, 60_000);
 
 /**
  * Identity resolution, in priority order:
@@ -41,7 +50,21 @@ async function authenticate(): Promise<AuthedUser | null> {
   return null;
 }
 
+/**
+ * Swaps the provider package's in-process synthesis cache for KV, once, when the binding is
+ * there. Idempotent and lazy rather than done at module load: the Cloudflare context only
+ * exists inside a request, so there is no earlier moment to ask.
+ */
+let synthesisCacheResolved = false;
+async function useSharedSynthesisCache(): Promise<void> {
+  if (synthesisCacheResolved) return;
+  synthesisCacheResolved = true;
+  const kv = await resolveKVBinding();
+  if (kv !== null) setSynthesisCache(new KVSynthesisCache(kv));
+}
+
 export async function buildRouteDeps(): Promise<RouteDeps> {
+  await useSharedSynthesisCache();
   const identity = await authenticate();
   return {
     authenticate: async () => identity,

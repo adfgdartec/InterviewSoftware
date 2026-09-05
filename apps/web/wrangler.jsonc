@@ -42,6 +42,10 @@
         "NEXT_PUBLIC_SUPABASE_URL": "",
         "LOOPCRAFT_ENV": "test"
       }
+      // Shared cache for synthesized interviewer audio. Without it every isolate re-
+      // synthesizes, and Cartesia bills per character. Create once, then uncomment:
+      //   pnpm exec wrangler kv namespace create TTS_CACHE_TEST
+      // "kv_namespaces": [{ "binding": "TTS_CACHE", "id": "<id>" }]
       // Secrets are NOT here. Set them per environment:
       //   pnpm exec wrangler secret put SUPABASE_ANON_KEY --env test
       //   pnpm exec wrangler secret put OPENAI_API_KEY    --env test
@@ -61,6 +65,10 @@
         "NEXT_PUBLIC_SUPABASE_URL": "",
         "LOOPCRAFT_ENV": "staging"
       }
+      // Shared cache for synthesized interviewer audio. Without it every isolate re-
+      // synthesizes, and Cartesia bills per character. Create once, then uncomment:
+      //   pnpm exec wrangler kv namespace create TTS_CACHE_STAGING
+      // "kv_namespaces": [{ "binding": "TTS_CACHE", "id": "<id>" }]
       // "hyperdrive": [{ "binding": "HYPERDRIVE", "id": "<id>" }],
       // "routes": [{ "pattern": "staging.example.com", "custom_domain": true }]
     },
@@ -73,6 +81,10 @@
         "NEXT_PUBLIC_SUPABASE_URL": "",
         "LOOPCRAFT_ENV": "production"
       }
+      // Shared cache for synthesized interviewer audio. Without it every isolate re-
+      // synthesizes, and Cartesia bills per character. Create once, then uncomment:
+      //   pnpm exec wrangler kv namespace create TTS_CACHE_PRODUCTION
+      // "kv_namespaces": [{ "binding": "TTS_CACHE", "id": "<id>" }]
       // "hyperdrive": [{ "binding": "HYPERDRIVE", "id": "<id>" }],
       //
       // The domain goes here when there is one. Until it is set, production lives at

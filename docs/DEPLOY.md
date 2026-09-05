@@ -125,7 +125,19 @@ which is closer to production than `next dev` and is where Workers-only problems
 - **Ollama is unreachable from a Worker.** `registry.ts` makes it primary for every reasoning
   purpose with OpenAI as fallback, so in production every call falls through to OpenAI. Your
   real unit costs are the fallback tier.
-- **The rate limiter and the TTS cache are per-process.** Both are `Map`s, and Workers run
-  many isolates, so neither does its job across more than one. Move them to a Durable Object
-  and KV before real traffic — the rate limiter is the only thing standing between an account
-  and unbounded provider spend.
+- ~~**The rate limiter and the TTS cache are per-process.**~~ **Closed.** The rate limiter is
+  now Postgres-backed (`PostgresRateLimiter`, migration 0009) and counts across every process
+  and isolate — one atomic upsert per check, and it *denies* rather than allows when the
+  database is unreachable. The TTS cache is now pluggable: it uses Workers KV when a
+  `TTS_CACHE` binding exists and the in-process `Map` otherwise, so the same code is correct
+  locally and on Workers. Create the namespace and uncomment the binding per environment in
+  `wrangler.jsonc`:
+
+  ```sh
+  cd apps/web
+  pnpm exec wrangler kv namespace create TTS_CACHE_PRODUCTION
+  ```
+
+  Note the rate limiter needs the database, so it needs Hyperdrive — until that exists the
+  limit is enforced by nothing on Workers, which is another reason not to open production up
+  before step 3.
