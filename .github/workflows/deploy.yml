@@ -1,0 +1,113 @@
+name: deploy
+
+# Branch is the environment. There is no manual "which env?" input, because the thing that
+# decides where code lands should be the thing that decides what code it is.
+#
+#   test     -> interviewsoftware-test         throwaway; safe to break
+#   staging  -> interviewsoftware-staging      production-shaped rehearsal
+#   main     -> interviewsoftware              production
+#
+# Nothing here needs a domain. Each environment is reachable at its own
+# <name>.<subdomain>.workers.dev until one is attached in apps/web/wrangler.jsonc.
+on:
+  push:
+    branches: [main, staging, test]
+  # Lets you redeploy a branch without an empty commit.
+  workflow_dispatch:
+
+concurrency:
+  # Per-branch, and NOT cancel-in-progress: cancelling a half-finished `wrangler deploy`
+  # is how you get a version live that no commit corresponds to.
+  group: deploy-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  # Deploys are fast but not blind. Postgres-backed suites already run in ci.yml on every
+  # PR; this is the subset that needs no services and still catches a broken build.
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.33.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: lint (includes no-affect-inference)
+        run: pnpm exec eslint .
+      - name: typecheck
+        run: pnpm run typecheck
+      - name: accessibility (axe)
+        run: pnpm --filter @loopcraft/web test:a11y
+
+  deploy:
+    needs: verify
+    runs-on: ubuntu-latest
+    # Named GitHub environments, so required reviewers or wait timers can be added to
+    # production later without touching this file.
+    environment:
+      name: >-
+        ${{ github.ref_name == 'main' && 'production'
+         || github.ref_name == 'staging' && 'staging'
+         || 'test' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.33.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+
+      - name: resolve target environment
+        id: target
+        run: |
+          case "${{ github.ref_name }}" in
+            main)    echo "env=production" >> "$GITHUB_OUTPUT" ;;
+            staging) echo "env=staging"    >> "$GITHUB_OUTPUT" ;;
+            test)    echo "env=test"       >> "$GITHUB_OUTPUT" ;;
+            *) echo "::error::${{ github.ref_name }} has no deploy environment"; exit 1 ;;
+          esac
+
+      # Fail with a sentence someone can act on, rather than letting wrangler produce an
+      # opaque auth error three minutes into a build.
+      - name: check cloudflare credentials are present
+        run: |
+          missing=0
+          [ -n "${{ secrets.CLOUDFLARE_API_TOKEN }}" ] || { echo "::error::CLOUDFLARE_API_TOKEN is not set in repository secrets"; missing=1; }
+          [ -n "${{ secrets.CLOUDFLARE_ACCOUNT_ID }}" ] || { echo "::error::CLOUDFLARE_ACCOUNT_ID is not set in repository secrets"; missing=1; }
+          exit $missing
+
+      # NEXT_PUBLIC_SUPABASE_URL is read at BUILD time as well as at runtime, so it has to
+      # be present here. It is a URL, not a credential -- hence a repository variable rather
+      # than a secret. Every actual secret is set once per environment with
+      # `wrangler secret put --env <env>` and is never handled by CI.
+      - name: build for workers
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: ${{ vars.NEXT_PUBLIC_SUPABASE_URL }}
+        run: pnpm --filter @loopcraft/web run cf:build
+
+      - name: deploy to ${{ steps.target.outputs.env }}
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          workingDirectory: apps/web
+          command: deploy --env ${{ steps.target.outputs.env }}
+
+      - name: summary
+        run: |
+          {
+            echo "### Deployed to \`${{ steps.target.outputs.env }}\`"
+            echo ""
+            echo "- commit: \`${{ github.sha }}\`"
+            echo "- branch: \`${{ github.ref_name }}\`"
+            echo ""
+            echo "No custom domain is attached yet; the environment is live on its"
+            echo "\`*.workers.dev\` address. Attach one in \`apps/web/wrangler.jsonc\`."
+          } >> "$GITHUB_STEP_SUMMARY"

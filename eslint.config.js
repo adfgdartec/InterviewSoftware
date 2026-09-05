@@ -7,6 +7,9 @@ export default tseslint.config(
     ignores: [
       '**/node_modules/**', '**/dist/**', '**/.next/**', '**/.venv/**',
       '**/coverage/**', '**/*.d.ts',
+      // Cloudflare Workers build output and local wrangler state. Generated code, not
+      // authored code; flat config does not read .gitignore, so it has to be named here.
+      '**/.open-next/**', '**/.wrangler/**',
     ],
   },
   js.configs.recommended,

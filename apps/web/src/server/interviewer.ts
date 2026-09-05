@@ -7,7 +7,7 @@ import {
   SILENCE_INTERRUPT_MS,
   nextRung,
   type HintRung,
-} from '@loopcraft/sandbox';
+} from '@loopcraft/sandbox/hints';
 
 /**
  * The real interviewer turn loop. Spec §2.2: "an interviewer agent that behaves like an

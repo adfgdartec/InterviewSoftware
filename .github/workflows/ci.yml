@@ -2,7 +2,9 @@ name: ci
 
 on:
   push:
-    branches: [main]
+    # The three environment branches. A push to any of them also triggers deploy.yml, which
+    # runs its own faster subset -- this is the full suite, including Postgres and Ollama.
+    branches: [main, staging, test]
   pull_request:
 
 concurrency:

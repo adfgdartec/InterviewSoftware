@@ -1,0 +1,87 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+
+  // Three deployed environments, one per branch:
+  //   test        <- branch `test`      throwaway; safe to break
+  //   staging     <- branch `staging`   production-shaped rehearsal
+  //   production  <- branch `main`
+  //
+  // Every environment is reachable at <name>.<your-subdomain>.workers.dev until a domain
+  // exists. Attaching one later is the `routes` block at the bottom of each environment --
+  // uncomment, set the pattern, redeploy. Nothing else changes.
+  //
+  // IMPORTANT wrangler behaviour: `vars`, and any bindings (kv_namespaces, durable_objects,
+  // hyperdrive, r2_buckets) are NOT inherited by named environments. They are repeated in
+  // full under each one on purpose; deleting a duplicate silently drops it from that
+  // environment rather than falling back to the top level.
+
+  "name": "interviewsoftware",
+  "main": ".open-next/worker.js",
+  "compatibility_date": "2026-09-05",
+  "compatibility_flags": ["nodejs_compat"],
+
+  "assets": {
+    "directory": ".open-next/assets",
+    "binding": "ASSETS"
+  },
+
+  "observability": { "enabled": true },
+
+  // Top level is the local `wrangler dev` target only. Deploys always pass --env.
+  "vars": {
+    "NEXT_PUBLIC_SUPABASE_URL": "",
+    "LOOPCRAFT_ENV": "local"
+  },
+
+  "env": {
+    "test": {
+      "name": "interviewsoftware-test",
+      "workers_dev": true,
+      "observability": { "enabled": true },
+      "vars": {
+        "NEXT_PUBLIC_SUPABASE_URL": "",
+        "LOOPCRAFT_ENV": "test"
+      }
+      // Secrets are NOT here. Set them per environment:
+      //   pnpm exec wrangler secret put SUPABASE_ANON_KEY --env test
+      //   pnpm exec wrangler secret put OPENAI_API_KEY    --env test
+      //   pnpm exec wrangler secret put DEEPGRAM_API_KEY  --env test
+      //   pnpm exec wrangler secret put CARTESIA_API_KEY  --env test
+      //
+      // Postgres needs a Hyperdrive binding (Workers Paid). Until then this environment
+      // serves pages but every database route fails, which is why `test` exists.
+      // "hyperdrive": [{ "binding": "HYPERDRIVE", "id": "<id>" }]
+    },
+
+    "staging": {
+      "name": "interviewsoftware-staging",
+      "workers_dev": true,
+      "observability": { "enabled": true },
+      "vars": {
+        "NEXT_PUBLIC_SUPABASE_URL": "",
+        "LOOPCRAFT_ENV": "staging"
+      }
+      // "hyperdrive": [{ "binding": "HYPERDRIVE", "id": "<id>" }],
+      // "routes": [{ "pattern": "staging.example.com", "custom_domain": true }]
+    },
+
+    "production": {
+      "name": "interviewsoftware",
+      "workers_dev": true,
+      "observability": { "enabled": true },
+      "vars": {
+        "NEXT_PUBLIC_SUPABASE_URL": "",
+        "LOOPCRAFT_ENV": "production"
+      }
+      // "hyperdrive": [{ "binding": "HYPERDRIVE", "id": "<id>" }],
+      //
+      // The domain goes here when there is one. Until it is set, production lives at
+      // interviewsoftware.<subdomain>.workers.dev. Set `workers_dev` to false at the same
+      // time so the product has exactly one address.
+      // "routes": [
+      //   { "pattern": "example.com", "custom_domain": true },
+      //   { "pattern": "www.example.com", "custom_domain": true }
+      // ]
+    }
+  }
+}

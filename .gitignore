@@ -36,3 +36,10 @@ apps/web/.env.local
 
 # Supabase CLI link state (local, machine-specific)
 supabase/.temp/
+
+# Cloudflare Workers build output and local wrangler state.
+.open-next/
+apps/web/.open-next/
+.wrangler/
+apps/web/.wrangler/
+apps/web/cloudflare-env.d.ts

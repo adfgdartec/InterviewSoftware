@@ -10,7 +10,13 @@
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
     "test": "vitest run && vitest run --config vitest.a11y.config.ts",
-    "test:a11y": "vitest run --config vitest.a11y.config.ts"
+    "test:a11y": "vitest run --config vitest.a11y.config.ts",
+    "cf:build": "opennextjs-cloudflare build",
+    "cf:preview": "opennextjs-cloudflare preview",
+    "cf:deploy:test": "opennextjs-cloudflare build && wrangler deploy --env test",
+    "cf:deploy:staging": "opennextjs-cloudflare build && wrangler deploy --env staging",
+    "cf:deploy:production": "opennextjs-cloudflare build && wrangler deploy --env production",
+    "cf:types": "wrangler types"
   },
   "dependencies": {
     "@loopcraft/core": "workspace:*",
@@ -28,6 +34,7 @@
     "zod": "3.25.76"
   },
   "devDependencies": {
+    "@opennextjs/cloudflare": "^1.20.6",
     "@tailwindcss/postcss": "4.3.3",
     "@types/jsdom": "21.1.7",
     "@types/react": "19.1.13",
@@ -37,6 +44,7 @@
     "postcss": "8.5.26",
     "tailwindcss": "4.3.3",
     "typescript": "5.9.3",
-    "vitest": "3.2.4"
+    "vitest": "3.2.4",
+    "wrangler": "^4.129.0"
   }
 }
