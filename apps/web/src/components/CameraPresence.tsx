@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState, type ReactElement } from 'react';
 import type { FaceDetector } from '@mediapipe/tasks-vision';
+import { FACE_DETECTOR_MODEL_URL, MEDIAPIPE_WASM_BASE } from '../lib/mediapipe-assets.js';
 import { framingVerdict, type FramingVerdict } from '../lib/framing-analysis.js';
 import {
   summarizePresence,
@@ -9,29 +10,6 @@ import {
   type PresenceSummary,
 } from '../lib/presence-analysis.js';
 
-/**
- * Continuous camera framing analysis for the length of a round.
- *
- * `CameraFramingCheck` answered "is my camera set up right?" once, before starting. This
- * answers "did my framing hold while I was actually talking?", which is the part a candidate
- * cannot check themselves -- you cannot watch your own framing and answer a question at the
- * same time.
- *
- * Three properties, all load-bearing:
- *
- * 1. No frame, image or video ever leaves the browser. `detectForVideo` runs against a WASM
- *    model in this tab; what crosses any boundary is at most a handful of ratios and counts.
- *    There is nothing to upload, so there is nothing to leak.
- * 2. Purely geometric. Every judgement comes from `framingVerdict` (a bounding box and two
- *    eye positions) and `summarizePresence` (counts of those judgements). Nothing reads
- *    expression, gaze intent or attentiveness.
- * 3. Opt-in and stoppable. The stream starts on an explicit click and every track is stopped
- *    on unmount, on stop, and on tab close -- never left running behind a navigation.
- */
-
-const WASM_BASE = 'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@1.0.1/wasm';
-const MODEL_URL =
-  'https://storage.googleapis.com/mediapipe-models/face_detector/blaze_face_short_range/float16/1/blaze_face_short_range.task';
 
 /**
  * 2 Hz. Fast enough that a few seconds off-centre is caught, slow enough that a CPU-delegate
@@ -143,119 +121,192 @@ export function CameraPresence({ roundKey, onSummary }: CameraPresenceProps): Re
     setLive(verdict);
   }
 
+  /**
+   * Two failures with completely different causes and completely different fixes, so they
+   * get separate handling. One catch around both reported a failed model download as
+   * "check your browser permissions", which sends someone to the one setting that was never
+   * the problem -- and hid, during development, that the camera had opened fine.
+   */
   async function start(): Promise<void> {
     setStatus('starting');
     setError(null);
     setSummary(null);
+
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ video: true });
-      streamRef.current = stream;
-      if (videoRef.current !== null) {
-        videoRef.current.srcObject = stream;
-        await videoRef.current.play();
-      }
-
-      const { FaceDetector, FilesetResolver } = await import('@mediapipe/tasks-vision');
-      const vision = await FilesetResolver.forVisionTasks(WASM_BASE);
-      detectorRef.current = await FaceDetector.createFromOptions(vision, {
-        baseOptions: { modelAssetPath: MODEL_URL, delegate: 'CPU' },
-        runningMode: 'VIDEO',
-      });
-
-      samplesRef.current = [];
-      startedAtRef.current = performance.now();
-      timerRef.current = setInterval(sampleOnce, SAMPLE_INTERVAL_MS);
-      setStatus('monitoring');
+      streamRef.current = await navigator.mediaDevices.getUserMedia({ video: true });
     } catch {
-      setError('Could not access the camera. Check your browser permissions.');
+      setError('Could not access the camera. Check your browser permissions for this site.');
       setStatus('error');
       stopEverything();
+      return;
     }
+
+    try {
+      const { FaceDetector, FilesetResolver } = await import('@mediapipe/tasks-vision');
+      const vision = await FilesetResolver.forVisionTasks(MEDIAPIPE_WASM_BASE);
+      detectorRef.current = await FaceDetector.createFromOptions(vision, {
+        baseOptions: { modelAssetPath: FACE_DETECTOR_MODEL_URL, delegate: 'CPU' },
+        runningMode: 'VIDEO',
+      });
+    } catch (cause) {
+      // The camera itself is fine; only the analysis could not load. Say so, and show the
+      // self-view anyway -- seeing yourself is worth having even without the framing advice.
+      console.error('[camera] framing model failed to load:', cause);
+      setError('Your camera is on, but the framing analysis could not load. Check your connection.');
+      setStatus('monitoring');
+      return;
+    }
+
+    // The <video> element only exists in the monitoring branch of the render, so the stream
+    // cannot be attached here -- videoRef is still null at this point. Flipping the status
+    // mounts the element; the effect below attaches the stream once it exists.
+    setStatus('monitoring');
   }
+
+  // Attaches the stream and starts sampling once the <video> element is actually mounted.
+  // Splitting this from `start` is what makes the self-view work: the element does not exist
+  // until `status` becomes 'monitoring', so assigning srcObject inside `start` silently did
+  // nothing and the preview stayed black.
+  useEffect(() => {
+    if (status !== 'monitoring') return;
+    const video = videoRef.current;
+    const stream = streamRef.current;
+    if (video === null || stream === null) return;
+
+    video.srcObject = stream;
+    void video.play().catch(() => {
+      setError('The camera preview could not start.');
+      setStatus('error');
+    });
+
+    samplesRef.current = [];
+    startedAtRef.current = performance.now();
+    // No detector means the self-view still runs; there is simply nothing to sample.
+    if (detectorRef.current !== null) {
+      timerRef.current = setInterval(sampleOnce, SAMPLE_INTERVAL_MS);
+    }
+
+    return () => {
+      if (timerRef.current !== null) {
+        clearInterval(timerRef.current);
+        timerRef.current = null;
+      }
+    };
+    // `sampleOnce` reads only refs, so it needs no dependency; re-running this on every
+    // render would restart the sampling clock mid-round.
+     
+  }, [status]);
 
   const wellFramed =
     live !== null && live.centered && live.distanceOk && live.eyeLineOk;
 
-  return (
-    <details className="rounded-lg border border-room-rule bg-room-wall p-4">
-      <summary className="label cursor-pointer text-room-ink-2 transition-colors hover:text-room-ink">
-        Camera framing
-      </summary>
-
-      <div className="mt-3">
-        <p className="max-w-[60ch] text-xs text-room-ink-2">
-          Optional. Watches only where your head sits in the frame, entirely on this device —
-          no image or video is ever uploaded. It produces framing advice, nothing about you.
+  // Idle and error share a compact opt-in row; once the camera is live the self-view is the
+  // point of the component, so it is NOT tucked behind a disclosure.
+  if (status === 'idle' || status === 'error' || status === 'starting') {
+    return (
+      <div className="rounded-lg border border-room-rule bg-room-wall p-4">
+        <p className="label text-room-ink-2">Camera</p>
+        <p className="mt-2 max-w-[60ch] text-xs text-room-ink-2">
+          Optional. Shows you your own camera while you answer, and watches only where your
+          head sits in the frame. It all happens on this device — no image or video is ever
+          uploaded. It produces framing advice, nothing about you.
         </p>
-
-        {status === 'idle' || status === 'error' ? (
-          <button type="button" onClick={() => void start()} className="btn btn-quiet mt-3">
-            Watch my framing this round
-          </button>
-        ) : null}
-
         {status === 'starting' ? (
           <p className="mt-3 text-sm text-room-ink-2">Starting the camera…</p>
-        ) : null}
-
-        <video
-          ref={videoRef}
-          muted
-          playsInline
-          className={
-            status === 'monitoring'
-              ? 'mt-3 w-full max-w-xs rounded-lg border border-room-rule'
-              : 'hidden'
-          }
-        />
-
-        {status === 'monitoring' ? (
-          <div className="mt-3">
-            {/* A live readout, so the feedback is useful DURING the round rather than only
-                after it. aria-live so it is announced rather than only seen. */}
-            <p
-              aria-live="polite"
-              className={`label ${wellFramed ? 'text-success' : 'text-gold-600'}`}
-            >
-              {live === null
-                ? 'No face in frame'
-                : wellFramed
-                  ? 'Framing looks good'
-                  : (live.messages[0] ?? 'Adjust your framing')}
-            </p>
-            <button type="button" onClick={finish} className="btn btn-quiet mt-3">
-              Stop and summarise
-            </button>
-          </div>
-        ) : null}
-
+        ) : (
+          <button type="button" onClick={() => void start()} className="btn btn-quiet mt-3">
+            Turn my camera on
+          </button>
+        )}
         {error !== null ? (
           <p role="alert" className="mt-3 text-sm font-medium text-danger">
             {error}
           </p>
         ) : null}
-
-        {summary !== null ? (
-          <div className="mt-4 border-t border-room-rule pt-3">
-            <p className="label text-room-ink-2">This round</p>
-            <p className="data mt-1 text-2xl text-room-ink">
-              {Math.round(summary.wellFramedRatio * 100)}%
-              <span className="ml-2 text-xs text-room-ink-2">well framed</span>
-            </p>
-            <p className="mt-1 text-xs text-room-ink-2">
-              {summary.sampleCount} samples · {summary.driftEvents} framing{' '}
-              {summary.driftEvents === 1 ? 'shift' : 'shifts'}
-            </p>
-            {summary.notes.length > 0 ? (
-              <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-room-ink-2">
-                {summary.notes.map((note) => (
-                  <li key={note}>{note}</li>
-                ))}
-              </ul>
-            ) : null}
-          </div>
-        ) : null}
+        {summary !== null ? <RoundSummary summary={summary} /> : null}
       </div>
-    </details>
+    );
+  }
+
+  return (
+    <div className="rounded-lg border border-room-rule bg-room-wall p-4">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-start">
+        {/* The self-view. A real interview puts your own face on screen, and seeing it is
+            what lets someone actually act on the framing advice beside it. */}
+        <div className="relative w-full shrink-0 overflow-hidden rounded-lg border border-room-rule bg-room-floor sm:w-64">
+          <video
+            ref={videoRef}
+            muted
+            playsInline
+            // Mirrored, which is what every video call does: an unmirrored self-view makes
+            // people correct their position the wrong way. Display only -- the detector reads
+            // the element's real pixels, so the geometry is unaffected. (framingVerdict never
+            // says "left" or "right", so nothing it reports is flipped by this either.)
+            className={status === 'monitoring' ? 'block w-full bg-room-floor' : 'hidden'}
+            // An inline transform rather than a utility class: the negative-scale utility did
+            // not survive into the build, and a self-view that is not mirrored makes people
+            // correct their position the wrong way.
+            style={{ transform: 'scaleX(-1)' }}
+          />
+          {status === 'monitoring' ? (
+            <span
+              aria-hidden="true"
+              className={`absolute left-2 top-2 h-2.5 w-2.5 rounded-full ${
+                live === null ? 'bg-danger' : wellFramed ? 'bg-success' : 'bg-gold-600'
+              }`}
+            />
+          ) : null}
+        </div>
+
+        <div className="min-w-0 flex-1">
+          <p className="label text-room-ink-2">Camera</p>
+          {/* Live, so the feedback is useful DURING the round rather than only after it.
+              aria-live so it is announced rather than only seen. */}
+          <p
+            aria-live="polite"
+            className={`mt-1 text-sm font-medium ${
+              live === null ? 'text-room-ink-2' : wellFramed ? 'text-success' : 'text-gold-600'
+            }`}
+          >
+            {live === null
+              ? 'No face in frame'
+              : wellFramed
+                ? 'Framing looks good'
+                : (live.messages[0] ?? 'Adjust your framing')}
+          </p>
+          <p className="mt-2 text-xs text-room-ink-2">
+            Nothing is uploaded. This runs entirely on your device.
+          </p>
+          <button type="button" onClick={finish} className="btn btn-quiet mt-3">
+            Turn camera off
+          </button>
+        </div>
+      </div>
+      {summary !== null ? <RoundSummary summary={summary} /> : null}
+    </div>
+  );
+}
+
+/** The round's framing summary, shown after the camera stops. */
+function RoundSummary({ summary }: { summary: PresenceSummary }): ReactElement {
+  return (
+    <div className="mt-4 border-t border-room-rule pt-3">
+      <p className="label text-room-ink-2">Last round</p>
+      <p className="data mt-1 text-2xl text-room-ink">
+        {Math.round(summary.wellFramedRatio * 100)}%
+        <span className="ml-2 text-xs text-room-ink-2">well framed</span>
+      </p>
+      <p className="mt-1 text-xs text-room-ink-2">
+        {summary.sampleCount} samples · {summary.driftEvents} framing{' '}
+        {summary.driftEvents === 1 ? 'shift' : 'shifts'}
+      </p>
+      {summary.notes.length > 0 ? (
+        <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-room-ink-2">
+          {summary.notes.map((note) => (
+            <li key={note}>{note}</li>
+          ))}
+        </ul>
+      ) : null}
+    </div>
   );
 }

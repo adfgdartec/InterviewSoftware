@@ -5,14 +5,9 @@ import { useEffect, useRef, useState, type ReactElement } from 'react';
 // the WASM loader itself is only pulled in by the dynamic `import()` inside startCamera(),
 // which is what actually keeps it out of every page that doesn't render this component.
 import type { FaceDetector } from '@mediapipe/tasks-vision';
+import { FACE_DETECTOR_MODEL_URL, MEDIAPIPE_WASM_BASE } from '../lib/mediapipe-assets.js';
 import { framingVerdict, type FramingVerdict } from '../lib/framing-analysis.js';
 
-// A short-range, ~200KB model: bounding box + sparse keypoints only, no expression or
-// identity output. Loaded from the same hosts the @mediapipe/tasks-vision docs use --
-// this component is not an Artifact, so it is not subject to the Artifact CDN allowlist.
-const WASM_BASE = 'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@1.0.1/wasm';
-const MODEL_URL =
-  'https://storage.googleapis.com/mediapipe-models/face_detector/blaze_face_short_range/float16/1/blaze_face_short_range.task';
 
 type Status = 'idle' | 'starting' | 'ready' | 'checked' | 'error';
 
@@ -51,9 +46,9 @@ export function CameraFramingCheck(): ReactElement {
       }
 
       const { FaceDetector, FilesetResolver } = await import('@mediapipe/tasks-vision');
-      const vision = await FilesetResolver.forVisionTasks(WASM_BASE);
+      const vision = await FilesetResolver.forVisionTasks(MEDIAPIPE_WASM_BASE);
       detectorRef.current = await FaceDetector.createFromOptions(vision, {
-        baseOptions: { modelAssetPath: MODEL_URL, delegate: 'CPU' },
+        baseOptions: { modelAssetPath: FACE_DETECTOR_MODEL_URL, delegate: 'CPU' },
         runningMode: 'VIDEO',
       });
       setStatus('ready');

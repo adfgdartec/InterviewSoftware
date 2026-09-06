@@ -60,14 +60,17 @@ describe('no public storage URL is constructed anywhere (guardrail 6)', () => {
     // The prototype's pattern: a bucket host CONCATENATED WITH a per-user object key, no
     // signature -- that's what leaked private video from a guessable path. A single fixed,
     // versioned, publicly-documented third-party asset URL is a different thing entirely:
-    // CameraFramingCheck.tsx's MODEL_URL points at MediaPipe's public face-detector model
-    // file, the same for every user, never combined with anything user- or session-specific.
-    // It is excluded here for exactly that reason, not because the pattern was avoided.
+    // lib/mediapipe-assets.ts holds the MediaPipe face-detector model URL: one fixed,
+    // versioned, publicly documented file, the same for every user and never combined with
+    // anything user- or session-specific. It is excluded for exactly that reason, not
+    // because the pattern was avoided. It is ONE module rather than each component so the
+    // exclusion cannot silently widen as components are added -- which is what happened when
+    // a second camera component appeared carrying its own copy of the URL.
     const publicBucket =
       /(storage\.googleapis\.com|\.s3\.[a-z0-9-]*\.?amazonaws\.com|\/storage\/v1\/object\/public\/)/;
     const offenders = sources()
       .filter(({ path }) => !path.startsWith('docs/'))
-      .filter(({ path }) => path !== 'apps/web/src/components/CameraFramingCheck.tsx')
+      .filter(({ path }) => path !== 'apps/web/src/lib/mediapipe-assets.ts')
       .filter(({ text }) => publicBucket.test(text))
       .map(({ path }) => path);
     expect(offenders).toEqual([]);

@@ -35,16 +35,18 @@ describe.skipIf(!openaiConfigured())('grading, live', () => {
     const sampler = llmGraderSampler();
     expect(sampler).not.toBeNull();
 
-    const [strong, weak] = await Promise.all([
-      gradeRound(RUBRIC, STRONG, sampler!),
-      gradeRound(RUBRIC, WEAK, sampler!),
-    ]);
+    // Sequential, deliberately. `Promise.all` here put SIX live calls in flight at once,
+    // which timed out under whole-suite load and failed a test about scoring for reasons
+    // that had nothing to do with scoring. Production grades one round at a time; so does
+    // this.
+    const strong = await gradeRound(RUBRIC, STRONG, sampler!);
+    const weak = await gradeRound(RUBRIC, WEAK, sampler!);
 
     // The whole product rests on this comparison. The stub could not make it: it scored on
     // length and digit-presence, so a long vacuous answer beat a short precise one.
     expect(strong.overall.median).toBeGreaterThan(weak.overall.median);
     expect(weak.overall.median).toBeLessThanOrEqual(3);
-  }, 120_000);
+  }, 180_000);
 
   it('quotes the candidate verbatim, not the question and not the rubric', async () => {
     const grade = await gradeRound(RUBRIC, STRONG, llmGraderSampler()!);
