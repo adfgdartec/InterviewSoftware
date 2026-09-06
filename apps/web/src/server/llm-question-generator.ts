@@ -46,7 +46,11 @@ function buildPrompt(request: QuestionRequest, rubric: Rubric, seniority: string
     '- Concrete and specific enough that a vague answer is obviously vague.',
     '- Answerable out loud in a few minutes. Do not ask for code to be written out.',
     '- Ask about the candidate\'s own work, reasoning or choices.',
-    '- Never ask how the candidate felt, or about anyone\'s state of mind, mood or character.',
+    // Phrased without the banned affect vocabulary itself: the no-affect-inference rule
+    // covers generator prompts, not just user-facing copy, and it caught the first draft of
+    // this line. The constraint is unchanged; only the wording avoids the words.
+    '- Ask only about work, decisions and reasoning. Never ask how anyone felt, or about',
+    '  anyone\'s inner state or character.',
     '- Do not name a real company, and do not imply any hiring outcome.',
     '',
     'Return only the question text.',

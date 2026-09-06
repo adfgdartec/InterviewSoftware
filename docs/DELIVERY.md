@@ -231,6 +231,13 @@ No provider keys are needed: every test mocks its providers and demo mode is det
     gated at 13+, and 16+ in the EU" is true as of this change. Remaining limits: the Google
     OAuth round trip and email delivery are unverified here (no Cloud credentials, no inbox).
 
+19. **Video analysis: continuous geometric presence.** `CameraPresence` samples framing at
+    2 Hz for the length of a round and `summarizePresence` aggregates it into well-framed
+    ratio, per-issue ratios, drift events and the longest steady stretch. Purely geometric and
+    entirely client-side: no frame, image or video ever leaves the browser, so there is nothing
+    to store or leak. Not persisted to the debrief yet -- the summary is shown in the round and
+    then discarded.
+
 **Verification debt**
 
 4. Colour contrast is unverified; jsdom cannot sample pixels. Needs a real browser.

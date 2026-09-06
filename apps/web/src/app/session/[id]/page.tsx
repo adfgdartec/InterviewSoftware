@@ -3,7 +3,7 @@
 import { use, useEffect, useState, type ReactElement } from 'react';
 import { ScoreWithInterval } from '../../../components/ScoreWithInterval.js';
 import { VoiceAnswerButton } from '../../../components/VoiceAnswerButton.js';
-import { CameraFramingCheck } from '../../../components/CameraFramingCheck.js';
+import { CameraPresence } from '../../../components/CameraPresence.js';
 import { QuestionAudio } from '../../../components/QuestionAudio.js';
 
 interface SessionView {
@@ -236,7 +236,9 @@ export default function SessionPage({ params }: { params: Promise<{ id: string }
 
           {view.videoEligible ? (
             <div className="border-t border-room-rule px-5 py-4 sm:px-8">
-              <CameraFramingCheck />
+              {/* Keyed on the round so each round is measured separately -- blending two
+                  rounds' samples would report a framing habit that never happened. */}
+              <CameraPresence roundKey={`${view.sessionId}:${view.currentRoundPosition}`} />
             </div>
           ) : null}
         </div>
