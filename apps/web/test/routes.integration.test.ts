@@ -5,6 +5,7 @@ import { postgresEntitlementStore } from '../src/server/entitlement-store.js';
 import { FixedWindowRateLimiter } from '../src/server/rate-limit.js';
 import {
   getSession,
+  postPresence,
   getSessionSpeech,
   getUserProfile,
   patchUserProfile,
@@ -106,6 +107,14 @@ function deps(
     costCeilingCents: 400,
     generationTimeoutMs: 50,
     graderSampler: null,
+    owner: async (fn) => {
+      const o = ownerClient();
+      try {
+        return await fn(o);
+      } finally {
+        await o.end({ timeout: 5 });
+      }
+    },
     ...overrides,
   };
 }
@@ -585,4 +594,126 @@ describe('POST /api/sessions/:id/audio', () => {
       expect(await res.json()).toMatchObject({ code: 'audio_too_large' });
     });
   }, 30_000);
+});
+
+/**
+ * Persisting a round's camera-framing summary. What is stored is nine numbers; the tests that
+ * matter here are the ones proving a client cannot store them for an account that is not
+ * allowed video, or attach them to somebody else's round.
+ */
+describe('POST /api/sessions/:id/presence', () => {
+  const SUMMARY = {
+    sampleCount: 40,
+    detectedCount: 38,
+    wellFramedRatio: 0.75,
+    offCenterRatio: 0.2,
+    distanceOffRatio: 0.1,
+    eyeLineOffRatio: 0.05,
+    driftEvents: 3,
+    longestWellFramedMs: 12_000,
+  };
+
+  const presenceReq = (body: unknown): Request =>
+    new Request('https://loopcraft.test/api/sessions/x/presence', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'idempotency-key': 'k-presence-1' },
+      body: JSON.stringify(body),
+    });
+
+  async function eligibleSession(): Promise<{ sessionId: string; roundId: string }> {
+    await withOwner(async (o) => {
+      await o`update plans set allows_video = true where id = ${FIXTURE.planId}`;
+      await o`update users set jurisdiction = 'us_other', age_band = '16_plus',
+              video_opt_in = true where id = ${FIXTURE.userA}`;
+    });
+    const { sessionId } = await startLoop(deps());
+    const rows = await withOwner((o) => o<{ id: string }[]>`
+      select id from rounds where session_id = ${sessionId} order by position limit 1`);
+    return { sessionId, roundId: rows[0]!.id };
+  }
+
+  it('stores a summary for an eligible account', async () => {
+    const { sessionId, roundId } = await eligibleSession();
+    const res = await postPresence(presenceReq({ roundId, ...SUMMARY }), sessionId, deps());
+    expect(res.status).toBe(200);
+
+    const stored = await withOwner((o) => o<{ drift_events: number; sample_count: number }[]>`
+      select drift_events, sample_count from round_presence where round_id = ${roundId}`);
+    expect(stored[0]?.drift_events).toBe(3);
+    expect(stored[0]?.sample_count).toBe(40);
+  });
+
+  it('is idempotent -- a resend updates rather than duplicating', async () => {
+    const { sessionId, roundId } = await eligibleSession();
+    await postPresence(presenceReq({ roundId, ...SUMMARY }), sessionId, deps());
+    const res = await postPresence(
+      presenceReq({ roundId, ...SUMMARY, driftEvents: 9 }), sessionId, deps(),
+    );
+    expect(res.status).toBe(200);
+
+    const rows = await withOwner((o) => o<{ drift_events: number }[]>`
+      select drift_events from round_presence where round_id = ${roundId}`);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]?.drift_events).toBe(9);
+  });
+
+  it('refuses an account that has not opted in, however the client asks', async () => {
+    const { sessionId, roundId } = await eligibleSession();
+    await withOwner((o) => o`update users set video_opt_in = false where id = ${FIXTURE.userA}`);
+
+    const res = await postPresence(presenceReq({ roundId, ...SUMMARY }), sessionId, deps());
+    expect(res.status).toBe(403);
+    expect(await res.json()).toMatchObject({ code: 'video_not_eligible' });
+
+    const rows = await withOwner((o) => o`select id from round_presence where round_id = ${roundId}`);
+    expect(rows).toHaveLength(0);
+  });
+
+  it('refuses an account in a jurisdiction where video is prohibited', async () => {
+    const { sessionId, roundId } = await eligibleSession();
+    await withOwner((o) => o`update users set jurisdiction = 'eu' where id = ${FIXTURE.userA}`);
+    const res = await postPresence(presenceReq({ roundId, ...SUMMARY }), sessionId, deps());
+    expect(res.status).toBe(403);
+  });
+
+  it("cannot attach a summary to another tenant's round", async () => {
+    const { sessionId, roundId } = await eligibleSession();
+    await withOwner(async (o) => {
+      await o`update users set jurisdiction = 'us_other', age_band = '16_plus',
+              video_opt_in = true where id = ${FIXTURE.userB}`;
+    });
+    // User B, user A's round. RLS scopes the lookup to B's org, so the round does not resolve.
+    const res = await postPresence(
+      presenceReq({ roundId, ...SUMMARY }), sessionId, deps(FIXTURE.userB, FIXTURE.orgB),
+    );
+    expect([403, 404]).toContain(res.status);
+
+    const rows = await withOwner((o) => o`select id from round_presence where round_id = ${roundId}`);
+    expect(rows).toHaveLength(0);
+  });
+
+  it('rejects a ratio outside 0..1 rather than storing it', async () => {
+    const { sessionId, roundId } = await eligibleSession();
+    const res = await postPresence(
+      presenceReq({ roundId, ...SUMMARY, wellFramedRatio: 1.4 }), sessionId, deps(),
+    );
+    expect(res.status).toBe(400);
+  });
+
+  it('rejects more detected frames than frames', async () => {
+    const { sessionId, roundId } = await eligibleSession();
+    const res = await postPresence(
+      presenceReq({ roundId, ...SUMMARY, sampleCount: 5, detectedCount: 50 }), sessionId, deps(),
+    );
+    expect(res.status).toBe(400);
+  });
+
+  it('401s an unauthenticated caller', async () => {
+    const { sessionId, roundId } = await eligibleSession();
+    const d = deps();
+    const res = await postPresence(presenceReq({ roundId, ...SUMMARY }), sessionId, {
+      ...d, authenticate: async () => null,
+    });
+    expect(res.status).toBe(401);
+  });
 });

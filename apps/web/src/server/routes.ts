@@ -44,6 +44,24 @@ export const submitTurnBody = z.object({
   transcript: z.string().min(1).max(50_000),
 });
 
+/**
+ * A round's camera-framing summary, as computed in the browser. Ratios only -- there is no
+ * field here that could carry a frame, an image, or a face landmark, because none is ever
+ * uploaded. The bounds are enforced again server-side: a client is free to lie about its own
+ * framing, but not to write a value the column would reject or a report would misdraw.
+ */
+export const presenceSummaryBody = z.object({
+  roundId: z.string().uuid(),
+  sampleCount: z.number().int().min(0).max(100_000),
+  detectedCount: z.number().int().min(0).max(100_000),
+  wellFramedRatio: z.number().min(0).max(1),
+  offCenterRatio: z.number().min(0).max(1),
+  distanceOffRatio: z.number().min(0).max(1),
+  eyeLineOffRatio: z.number().min(0).max(1),
+  driftEvents: z.number().int().min(0).max(100_000),
+  longestWellFramedMs: z.number().int().min(0).max(86_400_000),
+});
+
 export const patchUserProfileBody = z.object({
   displayName: z.string().min(1).max(200).optional(),
   jurisdiction: z.enum(['unknown', 'eu', 'illinois', 'us_other', 'other']).optional(),
@@ -60,6 +78,12 @@ export interface RouteDeps extends GuardPorts {
   readonly costCeilingCents: number;
   readonly generationTimeoutMs: number;
   readonly graderSampler: GraderSampler | null;
+  /**
+   * Runs a function on an owner connection, closing it afterwards. The Stripe webhook needs
+   * this: it arrives with no user, so there is no identity to run `asUser` with, and the rows
+   * it writes (entitlements, orgs) are exactly the ones RLS scopes to a member.
+   */
+  readonly owner: <T>(fn: (owner: Sql) => Promise<T>) => Promise<T>;
   /**
    * When true, postTurn runs the real conversational interviewer (spec §2.2): after each
    * answer, a live model decides whether to clarify, hint, or accept before the round
@@ -78,6 +102,8 @@ export interface SessionView {
   readonly roundCount: number;
   readonly currentRoundPosition: number;
   readonly currentRoundType: string | null;
+  /** Needed by the client to attach a camera-framing summary to the right round. */
+  readonly currentRoundId: string | null;
   readonly persona: string | null;
   readonly question: string | null;
   readonly pendingTurnId: string | null;
@@ -101,6 +127,7 @@ export function toView(state: SessionState, videoEligible = false): SessionView 
     roundCount: state.rounds.length,
     currentRoundPosition: state.session.currentRoundPosition,
     currentRoundType: state.currentRound?.roundType ?? null,
+    currentRoundId: state.currentRound?.id ?? null,
     persona: state.currentRound?.persona ?? null,
     question: state.pendingTurn?.question ?? null,
     pendingTurnId: state.pendingTurn?.id ?? null,
@@ -443,6 +470,96 @@ export async function postSessionAudio(
       console.error(`[${errorId}]`, transcriptionError);
       return json(502, { error: 'Transcription failed.', code: 'transcription_failed', errorId });
     }
+  } catch (error) {
+    const { status, body } = toErrorResponse(error, errorId);
+    return json(status, body);
+  }
+}
+
+/**
+ * POST /api/sessions/:id/presence -- stores one round's camera-framing summary.
+ *
+ * What crosses the wire is nine numbers. No frame, image, video or face landmark is ever
+ * uploaded, so there is nothing here to leak and nothing that could reconstruct a person --
+ * which is what keeps the compliance page's "produces only mechanical framing advice" true
+ * even now that the result is persisted.
+ *
+ * Eligibility is re-checked server-side rather than trusted from the client that sent it: a
+ * modified client must not be able to store framing data for an account that is in a
+ * jurisdiction where video is prohibited, or that never opted in.
+ */
+export async function postPresence(
+  request: Request,
+  sessionId: string,
+  deps: RouteDeps,
+): Promise<Response> {
+  const errorId = randomUUID();
+  try {
+    const { user, entitlement, body } = await guard(request, deps, {
+      schema: presenceSummaryBody,
+      mutating: true,
+      rateLimitBucket: 'sessions.presence',
+    });
+
+    if (body.detectedCount > body.sampleCount) {
+      return json(400, {
+        error: 'More detected frames than frames.',
+        code: 'invalid_request',
+        errorId,
+      });
+    }
+
+    const stored = await asUser(deps.sql, user.userId, async (tx) => {
+      const users = await tx<UserRow[]>`
+        select display_name, jurisdiction, age_band, video_opt_in
+        from users where id = ${user.userId}`;
+      const row = users[0];
+      const eligible = row !== undefined && videoEligible({
+        jurisdiction: row.jurisdiction,
+        ageBand: row.age_band,
+        videoOptIn: row.video_opt_in,
+        planAllowsVideo: entitlement.plan.allowsVideo,
+      });
+      if (!eligible) return 'ineligible' as const;
+
+      // RLS scopes rounds to the caller's org, so a round id belonging to someone else
+      // simply does not resolve -- the insert is skipped rather than misattributed.
+      const rounds = await tx<{ id: string; org_id: string }[]>`
+        select r.id, r.org_id from rounds r
+        join sessions s on s.id = r.session_id
+        where r.id = ${body.roundId} and s.id = ${sessionId}`;
+      const round = rounds[0];
+      if (round === undefined) return 'no_round' as const;
+
+      await tx`
+        insert into round_presence (
+          org_id, round_id, sample_count, detected_count, well_framed_ratio,
+          off_center_ratio, distance_off_ratio, eye_line_off_ratio,
+          drift_events, longest_well_framed_ms
+        ) values (
+          ${round.org_id}, ${round.id}, ${body.sampleCount}, ${body.detectedCount},
+          ${body.wellFramedRatio}, ${body.offCenterRatio}, ${body.distanceOffRatio},
+          ${body.eyeLineOffRatio}, ${body.driftEvents}, ${body.longestWellFramedMs}
+        )
+        on conflict (round_id) do update set
+          sample_count = excluded.sample_count,
+          detected_count = excluded.detected_count,
+          well_framed_ratio = excluded.well_framed_ratio,
+          off_center_ratio = excluded.off_center_ratio,
+          distance_off_ratio = excluded.distance_off_ratio,
+          eye_line_off_ratio = excluded.eye_line_off_ratio,
+          drift_events = excluded.drift_events,
+          longest_well_framed_ms = excluded.longest_well_framed_ms`;
+      return 'stored' as const;
+    });
+
+    if (stored === 'ineligible') {
+      return json(403, { error: 'Video is not enabled for this account.', code: 'video_not_eligible', errorId });
+    }
+    if (stored === 'no_round') {
+      return json(404, { error: 'Unknown round.', code: 'not_found', errorId });
+    }
+    return json(200, { stored: true });
   } catch (error) {
     const { status, body } = toErrorResponse(error, errorId);
     return json(status, body);

@@ -14,6 +14,7 @@ interface SessionView {
   readonly roundCount: number;
   readonly currentRoundPosition: number;
   readonly currentRoundType: string | null;
+  readonly currentRoundId: string | null;
   readonly persona: string | null;
   readonly question: string | null;
   readonly pendingTurnId: string | null;
@@ -238,7 +239,22 @@ export default function SessionPage({ params }: { params: Promise<{ id: string }
             <div className="border-t border-room-rule px-5 py-4 sm:px-8">
               {/* Keyed on the round so each round is measured separately -- blending two
                   rounds' samples would report a framing habit that never happened. */}
-              <CameraPresence roundKey={`${view.sessionId}:${view.currentRoundPosition}`} />
+              <CameraPresence
+                roundKey={`${view.sessionId}:${view.currentRoundPosition}`}
+                onSummary={(summary) => {
+                  // Nine numbers, computed in the browser. Fire-and-forget: framing advice
+                  // must never be able to block or fail an interview answer.
+                  if (view.currentRoundId === null) return;
+                  void fetch(`/api/sessions/${id}/presence`, {
+                    method: 'POST',
+                    headers: {
+                      'content-type': 'application/json',
+                      'idempotency-key': crypto.randomUUID(),
+                    },
+                    body: JSON.stringify({ roundId: view.currentRoundId, ...summary }),
+                  }).catch(() => {});
+                }}
+              />
             </div>
           ) : null}
         </div>

@@ -20,7 +20,8 @@
     "db:status": "./scripts/pg.sh status",
     "dev:web": "pnpm --filter @loopcraft/web dev",
     "dev:worker": "apps/worker/.venv/bin/uvicorn loopcraft_worker.app:app --app-dir apps/worker --port 8099",
-    "db:seed": "DATABASE_URL=postgres://loopcraft:loopcraft_local_dev@localhost:54329/loopcraft pnpm --filter @loopcraft/db db:seed"
+    "db:seed": "DATABASE_URL=postgres://loopcraft:loopcraft_local_dev@localhost:54329/loopcraft pnpm --filter @loopcraft/db db:seed",
+    "preflight": "node scripts/preflight.mjs --env-file apps/web/.env.local"
   },
   "devDependencies": {
     "turbo": "2.5.8",

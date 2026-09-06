@@ -42,6 +42,14 @@ function deps(overrides: Partial<RouteDeps> = {}): RouteDeps {
     costCeilingCents: 400,
     generationTimeoutMs: 20_000,
     graderSampler: heuristicGraderSampler(),
+    owner: async (fn) => {
+      const o = ownerClient();
+      try {
+        return await fn(o);
+      } finally {
+        await o.end({ timeout: 5 });
+      }
+    },
     interviewerEnabled: true,
     ...overrides,
   };

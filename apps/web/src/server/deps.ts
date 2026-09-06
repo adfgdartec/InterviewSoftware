@@ -1,5 +1,5 @@
 import { ITEM_BANK, itemsFor, loopTemplateById } from '@loopcraft/core';
-import { appClient, provisioningClient, DEV_PLAN_ID } from '@loopcraft/db';
+import { appClient, ownerClient, provisioningClient, DEV_PLAN_ID } from '@loopcraft/db';
 import { demoGenerator } from './demo.js';
 import { heuristicGraderSampler } from './heuristic-grader.js';
 import { llmGraderSampler } from './llm-grader.js';
@@ -89,6 +89,16 @@ export async function buildRouteDeps(): Promise<RouteDeps> {
     // contained a digit, which is why every debrief read the same number down the page. It
     // stays as the last resort so an unconfigured environment degrades rather than 503s.
     graderSampler: llmGraderSampler() ?? heuristicGraderSampler(),
+    // One connection, opened and closed around the callback. Only the Stripe webhook uses
+    // it; every user-facing route goes through asUser and RLS.
+    owner: async (fn) => {
+      const owner = ownerClient(undefined, 1);
+      try {
+        return await fn(owner);
+      } finally {
+        await owner.end({ timeout: 5 });
+      }
+    },
     interviewerEnabled: true,
   };
 }
