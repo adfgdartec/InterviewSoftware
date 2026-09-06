@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { DEV_PLAN_ID, FIXTURE, appClient, ownerClient, seedDevPlan } from '@loopcraft/db';
-import { authenticateWith } from '../src/server/auth.js';
+import { authenticateWith, bearerToken } from '../src/server/auth.js';
 import { provisionUser, SignupNotPermittedError } from '../src/server/provisioning.js';
 import { demoIdentityAllowed } from '../src/server/dev-identity.js';
 
@@ -244,5 +244,79 @@ describe('the demo identity cannot ship enabled', () => {
     env['NODE_ENV'] = 'development';
     env['LOOPCRAFT_DEV_IDENTITY'] = '1';
     expect(demoIdentityAllowed()).toBe(true);
+  });
+});
+
+/**
+ * Native clients cannot carry a browser cookie, so they send the Supabase access token in an
+ * Authorization header. The token is still VERIFIED by getUser(), never merely decoded --
+ * the same guarantee the cookie path has.
+ */
+describe('bearerToken', () => {
+  const withHeader = (value: string | null): Request =>
+    new Request('https://loopcraft.test/api/sessions', {
+      headers: value === null ? {} : { authorization: value },
+    });
+
+  it('extracts a token from a well-formed header', () => {
+    expect(bearerToken(withHeader('Bearer abc.def.ghi'))).toBe('abc.def.ghi');
+  });
+
+  it('is case-insensitive on the scheme, as RFC 7235 requires', () => {
+    expect(bearerToken(withHeader('bearer abc.def.ghi'))).toBe('abc.def.ghi');
+    expect(bearerToken(withHeader('BEARER abc.def.ghi'))).toBe('abc.def.ghi');
+  });
+
+  it('returns null when there is no header at all', () => {
+    expect(bearerToken(withHeader(null))).toBeNull();
+  });
+
+  it('returns null for a scheme that is not Bearer', () => {
+    // Basic auth must not be silently accepted as a token; it would reach getUser() and
+    // produce a confusing verification failure rather than an honest "not signed in".
+    expect(bearerToken(withHeader('Basic dXNlcjpwYXNz'))).toBeNull();
+  });
+
+  it('returns null for an empty or whitespace-only token', () => {
+    expect(bearerToken(withHeader('Bearer '))).toBeNull();
+    expect(bearerToken(withHeader('Bearer    '))).toBeNull();
+  });
+
+  it('passes the token to getUser rather than validating it itself', async () => {
+    // The point of the header path: what arrives is handed to Supabase to VERIFY. A version
+    // that decoded the JWT locally would accept a forged one.
+    let received: string | undefined = 'not-called';
+    const who = await authenticateWith({
+      supabase: {
+        getUser: async (token?: string) => {
+          received = token;
+          return { data: { user: { id: FIXTURE.userA, email: 'a@example.test' } }, error: null };
+        },
+      } as never,
+      accessToken: 'token-from-the-native-app',
+      sql,
+      owner: ownerClient,
+      planId: DEV_PLAN_ID,
+    });
+    expect(received).toBe('token-from-the-native-app');
+    expect(who).toEqual({ userId: FIXTURE.userA, orgId: FIXTURE.orgA });
+  });
+
+  it('falls back to the cookie session when no token is supplied', async () => {
+    let received: string | undefined = 'not-called';
+    await authenticateWith({
+      supabase: {
+        getUser: async (token?: string) => {
+          received = token;
+          return { data: { user: null }, error: null };
+        },
+      } as never,
+      accessToken: null,
+      sql,
+      owner: ownerClient,
+      planId: DEV_PLAN_ID,
+    });
+    // undefined, not a token: getUser() with no argument is the cookie path.
+    expect(received).toBeUndefined();
   });
 });

@@ -43,3 +43,7 @@ apps/web/.open-next/
 .wrangler/
 apps/web/.wrangler/
 apps/web/cloudflare-env.d.ts
+
+# Expo
+apps/mobile/.expo/
+apps/mobile/.env

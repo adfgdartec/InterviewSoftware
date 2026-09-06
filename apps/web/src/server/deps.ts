@@ -7,7 +7,7 @@ import { llmQuestionGenerator } from './llm-question-generator.js';
 import { PostgresRateLimiter } from './rate-limit.js';
 import { demoIdentity, demoIdentityAllowed } from './dev-identity.js';
 import { postgresEntitlementStore } from './entitlement-store.js';
-import { authenticateWith } from './auth.js';
+import { authenticateWith, bearerToken } from './auth.js';
 import { serverClient, supabaseConfigured } from './supabase.js';
 import { KVSynthesisCache, resolveKVBinding } from './synthesis-cache.js';
 import { setSynthesisCache } from '@loopcraft/providers';
@@ -39,10 +39,12 @@ const rateLimiter = new PostgresRateLimiter(sql, 120, 60_000);
  * to handing out entitled accounts; now it refuses, which is the correct answer for a
  * deployment whose auth is misconfigured.
  */
-async function authenticate(): Promise<AuthedUser | null> {
+async function authenticate(request?: Request): Promise<AuthedUser | null> {
   if (supabaseConfigured()) {
     return authenticateWith({
       supabase: (await serverClient()).auth,
+      // Native clients send a Bearer token; the browser sends a cookie. Same verification.
+      accessToken: request === undefined ? null : bearerToken(request),
       sql,
       // One connection, closed immediately after the single provisioning transaction.
       owner: provisioningClient,
@@ -66,9 +68,9 @@ async function useSharedSynthesisCache(): Promise<void> {
   if (kv !== null) setSynthesisCache(new KVSynthesisCache(kv));
 }
 
-export async function buildRouteDeps(): Promise<RouteDeps> {
+export async function buildRouteDeps(request?: Request): Promise<RouteDeps> {
   await useSharedSynthesisCache();
-  const identity = await authenticate();
+  const identity = await authenticate(request);
   return {
     authenticate: async () => identity,
     // Entitlements are resolved from the authenticated org. With no identity there is

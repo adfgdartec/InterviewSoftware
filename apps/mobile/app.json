@@ -1,0 +1,24 @@
+{
+  "expo": {
+    "name": "InterviewSoftware",
+    "slug": "interviewsoftware",
+    "scheme": "interviewsoftware",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "automatic",
+    "newArchEnabled": true,
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "ai.interviewsoftware.app",
+      "infoPlist": {
+        "NSMicrophoneUsageDescription": "Answer interview questions out loud. Your recording is sent for transcription and is never shared.",
+        "NSCameraUsageDescription": "Optional camera framing check. Video is analysed on your device and never uploaded."
+      }
+    },
+    "android": {
+      "package": "ai.interviewsoftware.app",
+      "permissions": ["RECORD_AUDIO"]
+    },
+    "plugins": ["expo-router"]
+  }
+}

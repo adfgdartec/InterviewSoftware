@@ -19,8 +19,15 @@ export const TERMS_VERSION = '2026-09-04';
 export const PRIVACY_VERSION = '2026-09-04';
 
 export interface AuthPorts {
-  /** Supabase client bound to this request's cookies. */
+  /**
+   * Supabase auth bound to this request. `getUser()` takes an optional access token: passed
+   * one it validates THAT token, otherwise it reads the session cookie. That single overload
+   * is what lets the same authenticate() serve the cookie-based web app and a native app
+   * sending `Authorization: Bearer <token>`, with no second code path to keep in sync.
+   */
   readonly supabase: Pick<SupabaseClient['auth'], 'getUser'> | SupabaseClient['auth'];
+  /** Bearer token from the request, for native clients. Null for cookie-based web requests. */
+  readonly accessToken?: string | null;
   /** RLS-scoped app connection, for reading the caller's own membership. */
   readonly sql: Sql;
   /** Owner connection factory, used only when a verified identity has no rows yet. */
@@ -47,7 +54,10 @@ function str(source: Record<string, unknown> | null | undefined, key: string): s
  * downstream needed to change.
  */
 export async function authenticateWith(ports: AuthPorts): Promise<AuthedUser | null> {
-  const { data, error } = await ports.supabase.getUser();
+  const token = ports.accessToken ?? null;
+  const { data, error } = token === null
+    ? await ports.supabase.getUser()
+    : await ports.supabase.getUser(token);
   if (error !== null || data.user === null || data.user === undefined) return null;
   const user = data.user as unknown as SupabaseUserShape;
   if (typeof user.id !== 'string' || user.id === '') return null;
@@ -92,4 +102,19 @@ export async function authenticateWith(ports: AuthPorts): Promise<AuthedUser | n
   } finally {
     await owner.end({ timeout: 5 });
   }
+}
+
+/**
+ * Extracts a Bearer token, or null.
+ *
+ * Native clients cannot use cookies the way a browser does, so they send the Supabase access
+ * token in an Authorization header instead. Everything downstream is identical: the token is
+ * still VERIFIED against the Auth server by getUser(), never merely decoded.
+ */
+export function bearerToken(request: Request): string | null {
+  const header = request.headers.get('authorization');
+  if (header === null) return null;
+  const match = /^Bearer\s+(.+)$/i.exec(header.trim());
+  const token = match?.[1]?.trim();
+  return token === undefined || token === '' ? null : token;
 }

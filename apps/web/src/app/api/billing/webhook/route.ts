@@ -7,5 +7,5 @@ import { buildRouteDeps } from '../../../../server/deps.js';
  * would break the signature, which is why the handler reads request.text() itself.
  */
 export async function POST(request: Request): Promise<Response> {
-  return postStripeWebhook(request, await buildRouteDeps());
+  return postStripeWebhook(request, await buildRouteDeps(request));
 }

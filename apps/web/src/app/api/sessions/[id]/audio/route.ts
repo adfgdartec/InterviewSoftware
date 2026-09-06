@@ -6,5 +6,5 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> },
 ): Promise<Response> {
   const { id } = await params;
-  return postSessionAudio(request, id, await buildRouteDeps());
+  return postSessionAudio(request, id, await buildRouteDeps(request));
 }

@@ -6,5 +6,5 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> },
 ): Promise<Response> {
   const { id } = await params;
-  return getSessionSpeech(request, id, await buildRouteDeps());
+  return getSessionSpeech(request, id, await buildRouteDeps(request));
 }

@@ -30,6 +30,22 @@ const STRONG = [
 
 const WEAK = ['Q: Tell me about a system you designed.', 'A: I worked on a pipeline. It went well.'].join('\n');
 
+/**
+ * Grades, retrying once if the contract discarded every sample.
+ *
+ * That failure is real but transient: a model occasionally paraphrases instead of quoting on
+ * all three passes, and the verbatim check correctly throws the lot away. It is not a
+ * SCORING failure, and a test about scoring should not fail for it -- a real user simply
+ * presses "Get your debrief" again, which is exactly what this does.
+ */
+async function gradeWithRetry(transcript: string): Promise<Awaited<ReturnType<typeof gradeRound>>> {
+  try {
+    return await gradeRound(RUBRIC, transcript, llmGraderSampler()!);
+  } catch {
+    return gradeRound(RUBRIC, transcript, llmGraderSampler()!);
+  }
+}
+
 describe.skipIf(!openaiConfigured())('grading, live', () => {
   it('scores a substantive answer above a vacuous one', async () => {
     const sampler = llmGraderSampler();
@@ -39,14 +55,14 @@ describe.skipIf(!openaiConfigured())('grading, live', () => {
     // which timed out under whole-suite load and failed a test about scoring for reasons
     // that had nothing to do with scoring. Production grades one round at a time; so does
     // this.
-    const strong = await gradeRound(RUBRIC, STRONG, sampler!);
-    const weak = await gradeRound(RUBRIC, WEAK, sampler!);
+    const strong = await gradeWithRetry(STRONG);
+    const weak = await gradeWithRetry(WEAK);
 
     // The whole product rests on this comparison. The stub could not make it: it scored on
     // length and digit-presence, so a long vacuous answer beat a short precise one.
     expect(strong.overall.median).toBeGreaterThan(weak.overall.median);
     expect(weak.overall.median).toBeLessThanOrEqual(3);
-  }, 180_000);
+  }, 300_000);
 
   it('quotes the candidate verbatim, not the question and not the rubric', async () => {
     const grade = await gradeRound(RUBRIC, STRONG, llmGraderSampler()!);

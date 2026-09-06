@@ -6,5 +6,5 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> },
 ): Promise<Response> {
   const { id } = await params;
-  return postTurn(request, id, await buildRouteDeps());
+  return postTurn(request, id, await buildRouteDeps(request));
 }
