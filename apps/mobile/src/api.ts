@@ -1,5 +1,5 @@
-import { API_BASE_URL } from './config.js';
-import { supabase } from './supabase.js';
+import { API_BASE_URL } from './config';
+import { supabase } from './supabase';
 
 /**
  * One fetch wrapper for every call to the product's API.
@@ -101,3 +101,77 @@ export const submitTurn = (id: string, turnId: string, transcript: string): Prom
 
 export const fetchDebrief = (id: string): Promise<DebriefPacket> =>
   api<DebriefPacket>(`/api/sessions/${id}/debrief`, { method: 'POST' });
+
+export interface UserProfile {
+  readonly displayName: string | null;
+  readonly jurisdiction: string;
+  readonly ageBand: string;
+  readonly videoOptIn: boolean;
+  readonly videoEligible: boolean;
+}
+
+export const loadProfile = (): Promise<UserProfile> => api<UserProfile>('/api/users/me');
+
+export const saveProfile = (patch: Partial<UserProfile>): Promise<UserProfile> =>
+  api<UserProfile>('/api/users/me', { method: 'PATCH', body: patch });
+
+export interface DeletionOutcome {
+  readonly rowsPurged: number;
+  readonly authRecordDeleted: boolean;
+}
+
+export const deleteAccount = (): Promise<DeletionOutcome> =>
+  api<DeletionOutcome>('/api/users/me', { method: 'DELETE' });
+
+/**
+ * Uploads a recording for transcription.
+ *
+ * Not routed through `api()` because the body is raw audio bytes, not JSON -- but it carries
+ * the same Bearer token and the same Idempotency-Key, which the route requires because each
+ * call bills a provider.
+ */
+export async function transcribe(sessionId: string, fileUri: string): Promise<string> {
+  const { data } = await supabase.auth.getSession();
+  const token = data.session?.access_token;
+
+  const audio = await fetch(fileUri);
+  const blob = await audio.blob();
+
+  const response = await fetch(`${API_BASE_URL}/api/sessions/${sessionId}/audio`, {
+    method: 'POST',
+    headers: {
+      ...(token === undefined ? {} : { authorization: `Bearer ${token}` }),
+      'content-type': 'audio/m4a',
+      'idempotency-key': globalThis.crypto.randomUUID(),
+    },
+    body: blob,
+  });
+
+  if (!response.ok) {
+    const body = (await response.json().catch(() => ({}))) as ErrorBody;
+    throw new ApiError(
+      response.status,
+      body.code ?? 'transcription_failed',
+      body.error ?? 'Could not transcribe that recording.',
+    );
+  }
+  const { transcript } = (await response.json()) as { transcript: string };
+  return transcript;
+}
+
+/**
+ * The URL for the interviewer speaking the current question.
+ *
+ * The token goes in the URL rather than a header because expo-av's player fetches the audio
+ * itself and cannot be given custom headers. That is acceptable here and nowhere else: the
+ * route is a GET, it returns audio for the caller's OWN session, and the token is short-lived
+ * -- but it does mean this URL must never be logged or shared.
+ */
+export async function speechUrl(sessionId: string): Promise<{ uri: string; headers: Record<string, string> }> {
+  const { data } = await supabase.auth.getSession();
+  const token = data.session?.access_token;
+  return {
+    uri: `${API_BASE_URL}/api/sessions/${sessionId}/speech`,
+    headers: token === undefined ? {} : { authorization: `Bearer ${token}` },
+  };
+}

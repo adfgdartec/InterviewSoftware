@@ -1,8 +1,8 @@
 import { useState } from 'react';
 import { ActivityIndicator, Pressable, Text, TextInput, View } from 'react-native';
 import { useRouter } from 'expo-router';
-import { supabase } from '../src/supabase.js';
-import { theme, space } from '../src/theme.js';
+import { supabase } from '../src/supabase';
+import { theme, space } from '../src/theme';
 
 /**
  * Sign-in. Password only: the native app has no browser to complete an OAuth redirect in

@@ -25,6 +25,17 @@ export default tseslint.config(
     },
   },
   {
+    // Build-tool config that MUST be CommonJS. Metro loads metro.config.js with require(),
+    // so it cannot be an ES module however much the rest of the repo is one -- these are the
+    // tool's rules, not a style choice.
+    files: ['**/metro.config.js', '**/babel.config.js'],
+    languageOptions: {
+      sourceType: 'commonjs',
+      globals: { require: 'readonly', module: 'writable', __dirname: 'readonly' },
+    },
+    rules: { '@typescript-eslint/no-require-imports': 'off' },
+  },
+  {
     // Test files legitimately quote the banned vocabulary in order to assert it is rejected.
     files: ['**/test/**', '**/*.test.ts', '**/*.test.js'],
     rules: { 'loopcraft/no-affect-inference': 'off' },

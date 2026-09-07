@@ -26,15 +26,41 @@ They ship inside the binary and anyone can extract them. That is expected: the a
 nothing on its own, because every table is behind RLS and every route behind the guard chain.
 The **service role** key must never appear in this app.
 
-## What is not built yet
+## What works
 
-- **Voice answers.** The web client records with `MediaRecorder`; the native equivalent is
-  `expo-av`, and the upload route already accepts raw audio with a Bearer token.
-- **The camera framing check.** MediaPipe's WASM detector does not run in React Native; this
-  needs `react-native-vision-camera` with a frame processor, which is a real port rather than
-  a wiring job.
+Sign up (with the same age and region gate the web form applies), sign in, browse the loop
+catalogue, run a full loop, answer by typing **or by voice**, hear the interviewer speak the
+question, get a graded debrief, edit your profile, and delete your account.
+
+## Bundling in a pnpm monorepo
+
+`metro.config.js` exists because Metro needed four things that `tsc` resolves natively — so
+the app typechecked cleanly while being impossible to bundle. Each was found by running
+`expo export`, and each comment in that file says what broke:
+
+1. Workspace packages live outside the app and resolve through symlinks (`watchFolders`).
+2. `@loopcraft/core/catalog` is a package-exports subpath, which Metro ignores. Turning on
+   `unstable_enablePackageExports` globally fixes it and immediately breaks expo-router, which
+   deep-imports its own `build/qualified-entry`; the workspace subpath is resolved explicitly
+   instead.
+3. `disableHierarchicalLookup` — a hoisted-monorepo flag — makes packages unable to resolve
+   themselves under pnpm's nested layout. It is deliberately NOT set.
+4. `@babel/runtime` is a direct dependency, because Babel emits helper imports from it and
+   pnpm does not hoist it where Metro looks.
+
+## What is still not built
+
+- **The camera framing check.** MediaPipe's WASM detector has no React Native equivalent; this
+  needs `react-native-vision-camera` with a frame processor and a native face detector. A real
+  port, not a wiring job. Everything else about video eligibility already works: the toggle in
+  Settings reads the server's decision and respects the EU/Illinois prohibition.
 - **Billing.** App Store rules require in-app purchase for digital goods, so this cannot simply
-  open the Stripe Checkout URL. Subscriptions must be bought on the web or via StoreKit.
+  open the Stripe Checkout URL. Subscriptions are bought on the web, or through StoreKit.
 - **Push notifications.** Needs `expo-notifications` plus APNs and FCM credentials.
 
-None of these block signing in, running a loop, or reading a graded debrief.
+## What has NOT been verified
+
+The app **bundles** (`expo export` produces a 2.9 MB iOS bundle containing this code) and
+typechecks. It has **not been run in a simulator or on a device** from the environment it was
+built in, so no screen has been seen rendering and no request has been observed leaving the
+app. The API it calls is covered by 309 server-side tests; the client is not.

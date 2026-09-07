@@ -4,8 +4,10 @@ import { useLocalSearchParams } from 'expo-router';
 import {
   fetchDebrief, loadSession, submitTurn,
   type DebriefPacket, type SessionView,
-} from '../../src/api.js';
-import { theme, space } from '../../src/theme.js';
+} from '../../src/api';
+import { theme, space } from '../../src/theme';
+import { VoiceAnswer } from '../../src/VoiceAnswer';
+import { QuestionAudio } from '../../src/QuestionAudio';
 
 /**
  * The loop itself. Same inversion as the web session page: while a loop is running this is a
@@ -149,6 +151,7 @@ export default function Session() {
       <View style={{ backgroundColor: theme.roomStage, borderRadius: 12, padding: space.md, gap: space.sm }}>
         <Text style={{ fontSize: 11, letterSpacing: 1, color: theme.gold600 }}>QUESTION</Text>
         <Text style={{ fontSize: 22, lineHeight: 30, color: theme.roomInk }}>{view.question}</Text>
+        <QuestionAudio sessionId={id} questionText={view.question ?? ''} />
       </View>
 
       <Text style={{ fontSize: 11, letterSpacing: 1, color: theme.roomInk2 }}>YOUR ANSWER</Text>
@@ -165,6 +168,11 @@ export default function Session() {
           backgroundColor: theme.roomWall,
         }}
       />
+
+      {/* The transcript lands in the same box the candidate types in, so it can be read and
+          corrected before submitting -- a transcription error should cost a correction, not
+          a score. */}
+      <VoiceAnswer sessionId={id} disabled={busy} onTranscribed={setAnswer} />
 
       {error !== null ? <Text accessibilityRole="alert" style={{ color: theme.danger }}>{error}</Text> : null}
 

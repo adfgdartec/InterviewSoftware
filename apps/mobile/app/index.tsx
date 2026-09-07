@@ -2,9 +2,9 @@ import { useEffect, useState } from 'react';
 import { ActivityIndicator, FlatList, Pressable, Text, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { LOOP_TEMPLATES, trackById } from '@loopcraft/core/catalog';
-import { supabase } from '../src/supabase.js';
-import { startLoop } from '../src/api.js';
-import { theme, space } from '../src/theme.js';
+import { supabase } from '../src/supabase';
+import { startLoop } from '../src/api';
+import { theme, space } from '../src/theme';
 
 /**
  * The catalogue. The templates come from @loopcraft/core, the SAME module the web app reads,
@@ -49,10 +49,16 @@ export default function Catalogue() {
           Loops are graded against published, anchored rubrics.
         </Text>
         <Pressable
-          onPress={() => router.push('/signin')}
+          onPress={() => router.push('/signup')}
           style={{ backgroundColor: theme.plum700, borderRadius: 8, padding: space.md, alignItems: 'center' }}
         >
-          <Text style={{ color: '#fff', fontWeight: '700', fontSize: 16 }}>Sign in</Text>
+          <Text style={{ color: '#fff', fontWeight: '700', fontSize: 16 }}>Create an account</Text>
+        </Pressable>
+        <Pressable
+          onPress={() => router.push('/signin')}
+          style={{ borderWidth: 1, borderColor: theme.ruleFirm, borderRadius: 8, padding: space.md, alignItems: 'center' }}
+        >
+          <Text style={{ color: theme.plum700, fontWeight: '700', fontSize: 16 }}>Sign in</Text>
         </Pressable>
       </View>
     );
@@ -79,6 +85,9 @@ export default function Catalogue() {
           <Text style={{ fontSize: 26, fontWeight: '700', color: theme.plum900 }}>
             Choose a loop
           </Text>
+          <Pressable onPress={() => router.push('/settings')} style={{ alignSelf: 'flex-start' }}>
+            <Text style={{ color: theme.plum700, fontWeight: '600' }}>Settings</Text>
+          </Pressable>
           {error !== null ? (
             <Text accessibilityRole="alert" style={{ color: theme.danger }}>{error}</Text>
           ) : null}
