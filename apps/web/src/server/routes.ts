@@ -22,6 +22,7 @@ import type { GraderSampler } from '@loopcraft/scoring';
 import type { LoopTemplate } from '@loopcraft/core';
 import { videoEligible } from './video-eligibility.js';
 import { videoOptInPermitted } from '../lib/video-opt-in.js';
+import { deleteAccount } from './account-deletion.js';
 import {
   cartesiaConfigured,
   deepgramConfigured,
@@ -84,6 +85,12 @@ export interface RouteDeps extends GuardPorts {
    * it writes (entitlements, orgs) are exactly the ones RLS scopes to a member.
    */
   readonly owner: <T>(fn: (owner: Sql) => Promise<T>) => Promise<T>;
+  /**
+   * Deletes the Supabase auth record, which holds the email. Absent when no service-role key
+   * is configured: the product data is purged either way, and the response says which
+   * happened rather than implying an erasure that did not.
+   */
+  readonly deleteAuthUser?: (userId: string) => Promise<void>;
   /**
    * When true, postTurn runs the real conversational interviewer (spec §2.2): after each
    * answer, a live model decides whether to clarify, hint, or accept before the round
@@ -560,6 +567,40 @@ export async function postPresence(
       return json(404, { error: 'Unknown round.', code: 'not_found', errorId });
     }
     return json(200, { stored: true });
+  } catch (error) {
+    const { status, body } = toErrorResponse(error, errorId);
+    return json(status, body);
+  }
+}
+
+/**
+ * DELETE /api/users/me -- erases the account.
+ *
+ * GDPR Article 17 and CCPA both require this, and `/compliance` promises it. There is
+ * deliberately no retention offer, no cooling-off period and no "are you sure?" beyond the
+ * client's own confirm: an erasure request that is answered with an obstacle is an erasure
+ * request that has not been honoured.
+ *
+ * It is irreversible and says so. The response reports what was actually purged rather than
+ * a bare 204, so the caller can see the promise was kept.
+ */
+export async function deleteUserAccount(request: Request, deps: RouteDeps): Promise<Response> {
+  const errorId = randomUUID();
+  try {
+    const { user } = await guard(request, deps, {
+      schema: z.object({}),
+      mutating: true,
+      rateLimitBucket: 'users.delete',
+    });
+
+    const outcome = await deps.owner((owner) =>
+      deleteAccount(owner, {
+        userId: user.userId,
+        orgId: user.orgId,
+        ...(deps.deleteAuthUser === undefined ? {} : { deleteAuthUser: deps.deleteAuthUser }),
+      }),
+    );
+    return json(200, outcome);
   } catch (error) {
     const { status, body } = toErrorResponse(error, errorId);
     return json(status, body);

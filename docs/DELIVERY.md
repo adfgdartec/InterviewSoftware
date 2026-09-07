@@ -251,8 +251,12 @@ No provider keys are needed: every test mocks its providers and demo mode is det
    engine still uses catalog order. `item_stats.response_count` is 0 for all 124 items.
 10. No Stripe integration. Flows, consent and cancellation are modelled and tested; no
     payment processor is connected.
-11. No account-deletion job (acceptance criterion 10). `users.deleted_at` exists and
-    `findIdentity` already refuses a soft-deleted user, but nothing purges rows or files.
+11. ~~No account-deletion job~~ **Closed 2026-09-06.** `DELETE /api/users/me` purges the
+    account through the org's fifteen cascade references, so a tenant table added later is
+    purged because it is a cascade rather than because someone remembered. The audit record
+    is deliberately kept -- it is the evidence the request was honoured. Remaining gap: the
+    Supabase auth record holding the email needs a service-role key to delete, and the
+    response reports honestly whether that happened.
 12. No Playwright e2e; the `e2e/` workspace from spec §3.1 does not exist.
 13. Per-track domain rubrics: 11 of 12 tracks share one domain rubric.
 14. ~~Rate limiter is in-process~~ **Closed 2026-09-05.** `PostgresRateLimiter`

@@ -122,6 +122,23 @@ export default async function RootLayout({ children }: { children: ReactNode }):
             <p className="mt-6 max-w-[70ch] border-l-2 border-gold-600 pl-4 text-sm text-neutral-600">
               {BRAND.affiliationDisclaimer}
             </p>
+            <ul className="mt-6 flex flex-wrap gap-x-6 gap-y-2">
+              {[
+                { href: '/terms', label: 'Terms of service' },
+                { href: '/privacy', label: 'Privacy notice' },
+                { href: '/compliance', label: 'Compliance' },
+                { href: '/calibration', label: 'How scoring works' },
+              ].map((link) => (
+                <li key={link.href}>
+                  <a
+                    href={link.href}
+                    className="text-sm text-neutral-600 underline decoration-rule-firm underline-offset-2 transition-colors hover:text-plum-700"
+                  >
+                    {link.label}
+                  </a>
+                </li>
+              ))}
+            </ul>
           </div>
         </footer>
       </body>

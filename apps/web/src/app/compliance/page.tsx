@@ -51,12 +51,18 @@ export default function CompliancePage(): ReactElement {
           </li>
           <li>
             <strong>CCPA/CPRA and GDPR.</strong> No biometric data is processed for unique
-            identification. Retention periods are published and deletion purges both database
-            rows and stored files.
+            identification. Retention periods are published in the{' '}
+            <a href="/privacy" className="font-medium text-plum-700 underline underline-offset-2">
+              privacy notice
+            </a>
+            , and deleting an account purges its sessions, answers and scores immediately —
+            not just the login.
           </li>
           <li>
-            <strong>Minors.</strong> Accounts are gated at 13+, and 16+ in the EU. Video is
-            never processed for an account flagged as a minor.
+            <strong>Minors.</strong> Accounts are gated at 13+, and 16+ in the EU, enforced
+            server-side at signup before any account is created. Age and region are
+            self-reported and not independently verified. Video is never processed for an
+            account flagged as a minor.
           </li>
         </ul>
       </section>
@@ -95,8 +101,13 @@ export default function CompliancePage(): ReactElement {
           Accessibility
         </h2>
         <p className="mt-2 text-neutral-900">
-          We target WCAG 2.2 AA: full keyboard operation, captions on generated audio, a
-          text-only interview mode, and configurable time limits.
+          We target WCAG 2.2 AA and audit every route with axe on each build. Full keyboard
+          operation and a text-only interview mode are shipped — typing is the default, and
+          voice is opt-in. Spoken questions carry no caption track, because the question text
+          is always on screen above the player as its text alternative. Configurable time
+          limits are not implemented: no round is timed today, so there is no limit to
+          configure. Colour contrast is designed to AA but has not yet been verified in a
+          browser, which is recorded as an open gap rather than claimed as done.
         </p>
       </section>
 

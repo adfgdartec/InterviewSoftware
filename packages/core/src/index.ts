@@ -7,3 +7,4 @@ export * from './tracks.js';
 export * from './rubrics.js';
 export * from './loop-templates.js';
 export * from './item-bank.js';
+export * from './retention.js';

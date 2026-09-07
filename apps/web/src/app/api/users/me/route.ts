@@ -1,4 +1,4 @@
-import { getUserProfile, patchUserProfile } from '../../../../server/routes.js';
+import { deleteUserAccount, getUserProfile, patchUserProfile } from '../../../../server/routes.js';
 import { buildRouteDeps } from '../../../../server/deps.js';
 
 export async function GET(request: Request): Promise<Response> {
@@ -7,4 +7,8 @@ export async function GET(request: Request): Promise<Response> {
 
 export async function PATCH(request: Request): Promise<Response> {
   return patchUserProfile(request, await buildRouteDeps(request));
+}
+
+export async function DELETE(request: Request): Promise<Response> {
+  return deleteUserAccount(request, await buildRouteDeps(request));
 }

@@ -21,6 +21,8 @@ import SignInPage from '../src/app/signin/page.js';
 import SignUpPage from '../src/app/signup/page.js';
 import ResetPage from '../src/app/auth/reset/page.js';
 import ResetConfirmPage from '../src/app/auth/reset/confirm/page.js';
+import PrivacyPage from '../src/app/privacy/page.js';
+import TermsPage from '../src/app/terms/page.js';
 import { Dashboard } from '../src/components/Dashboard.js';
 import { AbilityReadout, ScoreWithInterval } from '../src/components/ScoreWithInterval.js';
 
@@ -146,6 +148,8 @@ describe('primary routes have zero critical or serious axe violations', () => {
     ['sign up', () => SignUpPage({ searchParams: EMPTY_PARAMS })],
     ['password reset', () => ResetPage({ searchParams: EMPTY_PARAMS })],
     ['password reset confirm', () => ResetConfirmPage()],
+    ['privacy notice', () => <PrivacyPage />],
+    ['terms of service', () => <TermsPage />],
   ])('%s', async (_name, render) => {
     const element = await render();
     const violations = await auditHtml(documentFor(element));

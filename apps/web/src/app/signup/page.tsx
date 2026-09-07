@@ -86,7 +86,7 @@ export default async function SignUpPage(
           {
             kind: 'checkbox',
             id: 'accept',
-            label: 'I accept the terms of service and the privacy notice.',
+            label: 'I accept the terms of service and the privacy notice (linked in the footer).',
           },
         ]}
       />
