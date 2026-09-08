@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { rubricById, findBannedTokensInText } from '@loopcraft/core';
 import {
   GRADER_SAMPLE_COUNT,
@@ -189,5 +189,97 @@ describe('gradeRound', () => {
     const agree = await gradeRound(RUBRIC, TRANSCRIPT, samplerReturning(verdicts([3, 3, 3, 3])));
     const spread = await gradeRound(RUBRIC, TRANSCRIPT, samplerReturning(verdicts([1, 2, 4, 5])));
     expect(spread.overall.halfWidth).toBeGreaterThan(agree.overall.halfWidth);
+  });
+});
+
+/**
+ * The n=3 samples used to run in a `for` loop with an `await` inside, so a round cost three
+ * round trips end to end and a five-round loop cost fifteen. These pin the concurrency down
+ * so a future edit cannot quietly serialise it again, and pin the discard/rethrow rules that
+ * had to survive the change.
+ */
+describe('grading issues its samples concurrently', () => {
+  const RUBRIC = rubricById('ml-systems.design.v1')!;
+  const TRANSCRIPT =
+    'I would shard checkpoint writes across replicas because a node fails every 90 minutes.';
+
+  function validSample(): unknown {
+    return {
+      dimensions: RUBRIC.dimensions.map((d) => ({
+        dimension: d.id,
+        level: 3,
+        evidenceQuote: 'I would shard checkpoint writes across replicas',
+      })),
+    };
+  }
+
+  it('starts every sample before any of them resolves', async () => {
+    let inFlight = 0;
+    let peak = 0;
+    const release: (() => void)[] = [];
+
+    const grading = gradeRound(RUBRIC, TRANSCRIPT, {
+      async sample() {
+        inFlight += 1;
+        peak = Math.max(peak, inFlight);
+        await new Promise<void>((resolve) => release.push(resolve));
+        inFlight -= 1;
+        return validSample();
+      },
+    });
+
+    // Yield until all three have registered, then let them finish.
+    await vi.waitFor(() => expect(release).toHaveLength(3));
+    for (const resolve of release) resolve();
+    await grading;
+
+    expect(peak).toBe(3);
+  });
+
+  it('still discards a sample that violates the contract and grades on the survivors', async () => {
+    let call = 0;
+    const grade = await gradeRound(RUBRIC, TRANSCRIPT, {
+      async sample() {
+        call += 1;
+        // The second sample quotes something the candidate never said.
+        return call === 2
+          ? {
+              dimensions: RUBRIC.dimensions.map((d) => ({
+                dimension: d.id,
+                level: 5,
+                evidenceQuote: 'a sentence that is nowhere in the transcript',
+              })),
+            }
+          : validSample();
+      },
+    });
+    expect(grade.samplesCollected).toBe(2);
+  });
+
+  it('propagates a non-contract failure rather than grading on what survived it', async () => {
+    await expect(
+      gradeRound(RUBRIC, TRANSCRIPT, {
+        async sample(_prompt, _temperature, index) {
+          if (index === 2) throw new Error('upstream 503');
+          return validSample();
+        },
+      }),
+    ).rejects.toThrow('upstream 503');
+  });
+
+  it('reports the same failure regardless of which sample loses the race', async () => {
+    const grading = gradeRound(RUBRIC, TRANSCRIPT, {
+      async sample(_prompt, _temperature, index) {
+        // Sample 3 fails first in wall-clock terms; sample 2's failure must still be the
+        // one reported, because results are walked in sample order.
+        if (index === 3) throw new Error('third');
+        if (index === 2) {
+          await new Promise((resolve) => setTimeout(resolve, 10));
+          throw new Error('second');
+        }
+        return validSample();
+      },
+    });
+    await expect(grading).rejects.toThrow('second');
   });
 });

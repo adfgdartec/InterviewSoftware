@@ -34,6 +34,28 @@ export interface AttributeEvidence {
   readonly lowInformation: boolean;
 }
 
+/**
+ * Camera-framing measurements for the session, carried through to the debrief.
+ *
+ * Every field is a count, a ratio of counts, or a duration -- geometry over time, nothing
+ * about the person. The notes are written where the thresholds live (the web app's
+ * presence-analysis module) and carried verbatim, so this package holds no advice text of
+ * its own and no rule for producing any.
+ */
+export interface PresenceReport {
+  readonly sampleCount: number;
+  readonly detectedCount: number;
+  readonly wellFramedRatio: number;
+  readonly offCenterRatio: number;
+  readonly distanceOffRatio: number;
+  readonly eyeLineOffRatio: number;
+  readonly driftEvents: number;
+  readonly longestWellFramedMs: number;
+  /** How many rounds contributed. Named so the debrief can say what the numbers cover. */
+  readonly roundCount: number;
+  readonly notes: readonly string[];
+}
+
 export interface DebriefPacket {
   readonly sessionId: string;
   readonly trackId: string;
@@ -48,6 +70,13 @@ export interface DebriefPacket {
   readonly practiceFocus: readonly AttributeEvidence[];
   readonly methodNote: string;
   readonly calibrationLink: string;
+  /**
+   * Null whenever the session has no framing data at all -- video off, not opted in, not
+   * permitted in the candidate's region, or simply an audio round. Null and "measured, and
+   * the framing was poor" are different answers, so the absent case is explicit rather than
+   * a zeroed report that reads like a bad score.
+   */
+  readonly presence: PresenceReport | null;
 }
 
 export const METHOD_NOTE =
@@ -68,6 +97,7 @@ export interface AssembleInput {
   readonly levelBand: string;
   readonly rounds: readonly RoundInput[];
   readonly practiceFocusCount?: number;
+  readonly presence?: PresenceReport | null;
 }
 
 /**
@@ -129,6 +159,7 @@ export function assembleDebrief(input: AssembleInput): DebriefPacket {
     practiceFocus,
     methodNote: METHOD_NOTE,
     calibrationLink: CALIBRATION_PATH,
+    presence: input.presence ?? null,
   };
 }
 

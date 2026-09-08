@@ -190,6 +190,56 @@ describe('the graded demo loop ends in a debrief packet', () => {
     }
   });
 
+  /**
+   * The framing rows were written by the presence route and read by nothing: the table, the
+   * route and their tests all passed while the debrief showed no framing at all. This drives
+   * the whole path -- stored rows in, one combined report out of the packet.
+   */
+  it('carries stored camera framing through to the packet', async () => {
+    const d = deps();
+    const sessionId = await runFullLoop(d);
+
+    const owner = ownerClient();
+    try {
+      const rounds = await owner<{ id: string; org_id: string }[]>`
+        select id, org_id from rounds where session_id = ${sessionId} order by position asc`;
+      expect(rounds.length).toBe(5);
+      // Two rounds measured, three not -- the ordinary case where the camera was on for part
+      // of a loop, and the one that proves the report covers only what was measured.
+      for (const [index, round] of rounds.slice(0, 2).entries()) {
+        await owner`
+          insert into round_presence (
+            org_id, round_id, sample_count, detected_count, well_framed_ratio,
+            off_center_ratio, distance_off_ratio, eye_line_off_ratio,
+            drift_events, longest_well_framed_ms
+          ) values (
+            ${round.org_id}, ${round.id}, 200, 200, ${index === 0 ? 0.9 : 0.8},
+            0, 0, 0, ${index === 0 ? 2 : 3}, ${index === 0 ? 15_000 : 42_000}
+          )`;
+      }
+    } finally {
+      await owner.end({ timeout: 5 });
+    }
+
+    const packet = await (await postDebrief(post({}), sessionId, d)).json();
+
+    expect(packet.presence).not.toBeNull();
+    expect(packet.presence.roundCount).toBe(2);
+    expect(packet.presence.sampleCount).toBe(400);
+    expect(packet.presence.wellFramedRatio).toBeCloseTo(0.85, 2);
+    expect(packet.presence.driftEvents).toBe(5);
+    expect(packet.presence.longestWellFramedMs).toBe(42_000);
+    expect(packet.presence.notes.length).toBeGreaterThan(0);
+    expect(findBannedTokensInText(packet.presence.notes.join(' '))).toEqual([]);
+  });
+
+  it('reports no framing at all as null, not as a zeroed report', async () => {
+    const d = deps();
+    const sessionId = await runFullLoop(d);
+    const packet = await (await postDebrief(post({}), sessionId, d)).json();
+    expect(packet.presence).toBeNull();
+  });
+
   it('refuses to grade a loop that is not complete', async () => {
     const d = deps();
     const created = await postSession(post({ loopTemplateId: TEMPLATE.id, levelBand: 'L5' }), d);

@@ -1,15 +1,15 @@
 {
-  "$comment": "Vendor rates in USD. Every value is null until an engineer fills it in from the vendor's CURRENT pricing page -- see rates-sources.md for which page each one comes from. estimateSessionCost() throws naming any null it needs, so the cost model can never invent a price (guardrail 8, spec §4). Update `asOf` whenever a rate changes.",
-  "asOf": null,
+  "$comment": "Vendor rates in USD, each read from the vendor's own pricing page on the date in `asOf` -- see rates-sources.md for the page and the plan tier each one came from. A value stays null until it can be read from the vendor directly; estimateSessionCost() throws naming any null it needs, so the cost model can never invent a price (guardrail 8, spec §4). Update `asOf` whenever a rate changes.",
+  "asOf": "2026-09-07",
   "currency": "USD",
-  "asrPerMinute": null,
+  "asrPerMinute": 0.0043,
   "ttsPerThousandCharacters": null,
   "llm": {
-    "questionGeneration": { "inputPerMillionTokens": null, "outputPerMillionTokens": null },
-    "grading": { "inputPerMillionTokens": null, "outputPerMillionTokens": null }
+    "questionGeneration": { "inputPerMillionTokens": 0.15, "outputPerMillionTokens": 0.6 },
+    "grading": { "inputPerMillionTokens": 2.5, "outputPerMillionTokens": 10.0 }
   },
   "codeExecutionPerCpuSecond": null,
-  "storagePerGigabyteMonth": null,
-  "egressPerGigabyte": null,
-  "payment": { "percentOfTransaction": null, "fixedPerTransaction": null }
+  "storagePerGigabyteMonth": 0.125,
+  "egressPerGigabyte": 0.09,
+  "payment": { "percentOfTransaction": 0.029, "fixedPerTransaction": 0.3 }
 }

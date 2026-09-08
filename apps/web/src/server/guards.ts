@@ -164,6 +164,16 @@ function hasHttpStatus(error: unknown): error is HttpStatusError {
   );
 }
 
+/**
+ * An error may name its own wire code, the way EntitlementDeniedError does. Without this a
+ * 503 from an unavailable grader would be reported as the generic `request_failed`, and the
+ * client could not tell "grading is not configured" apart from any other failed request.
+ */
+function explicitCode(error: unknown): string | null {
+  const code = (error as { code?: unknown }).code;
+  return typeof code === 'string' && code.length > 0 ? code : null;
+}
+
 export interface ErrorBody {
   readonly error: string;
   readonly code: string;
@@ -203,7 +213,9 @@ export function toErrorResponse(error: unknown, errorId: string): { status: numb
   // and turn a legitimate 404 into a page that looks like an outage.
   if (hasHttpStatus(error)) {
     const status = error.httpStatus;
-    const code = status === 404 ? 'not_found' : status === 409 ? 'conflict' : 'request_failed';
+    const code =
+      explicitCode(error) ??
+      (status === 404 ? 'not_found' : status === 409 ? 'conflict' : 'request_failed');
     return { status, body: { error: error.message, code, errorId } };
   }
   return {

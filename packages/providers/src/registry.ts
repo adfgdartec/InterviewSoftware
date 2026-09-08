@@ -31,42 +31,50 @@ const entry = (
   : { provider, model, timeoutMs, maxRetries, degradeTo });
 
 /**
- * Open-source first: every reasoning purpose runs on a locally-hosted model via Ollama by
- * default (no API key, no per-token cost, no network round trip). OpenAI is the fallback
- * tier, used only when the local model is unavailable or degrades under the cost ceiling
- * (packages/providers/src/ceiling.ts) -- never the default.
+ * OpenAI first, local Ollama as the fallback tier.
  *
- * Model tags name what is ACTUALLY pulled on the machine this was built on (`ollama list`),
- * not an aspirational tag that has to be downloaded before anything works. llama3.1:8b and
- * qwen2.5:14b were the originally intended tags; this host already had llama3.2:latest (2GB)
- * and llama3:latest (4.7GB) from prior work, and pulling the aspirational tags on a 20GB-free
- * disk was the exact mistake that broke Docker earlier in this build. Grading intentionally
- * uses a different model family (llama3, not llama3.2) so grader separation (spec §2.6) is a
- * real distinction, not two tags for the same weights. Swap OLLAMA_HOST to point at a remote
- * Ollama/vLLM host, or pull the originally-intended tags yourself, if you want them back.
+ * This ordering is a deployment fact, not a preference. The product runs on Cloudflare
+ * Workers, and a Worker cannot reach `localhost:11434`, so a local-first ordering meant the
+ * primary tier was unreachable for every request in production. Worse, `interviewer.ts` had
+ * no OpenAI path at all and short-circuited to "accept" whenever the Ollama probe failed --
+ * so the back-and-forth interview silently did not happen in production at all.
+ *
+ * Ordering alone does not decide anything: call sites resolve a purpose through
+ * `selectEntry()`, which walks [primary, ...fallbacks] and takes the first provider that is
+ * actually usable. A developer with no OPENAI_API_KEY therefore still runs entirely on local
+ * Ollama at no cost, and a Worker with a key never probes localhost. Reordering this list is
+ * the only change needed to move the default tier.
+ *
+ * Ollama model tags name what is ACTUALLY pulled on the machine this was built on
+ * (`ollama list`), not an aspirational tag that has to be downloaded before anything works.
+ * Grading intentionally uses a different model from the interviewer in BOTH tiers -- gpt-4o
+ * vs gpt-4o-mini, llama3 vs llama3.2 -- so grader separation (spec §2.6) is a real
+ * distinction at whichever tier is serving, not an artifact of one of them.
  */
 export const REGISTRY: readonly RegistryEntry[] = [
   {
     purpose: 'question_generation',
-    primary: entry('ollama', 'llama3.2:latest', 20_000, 2, 'llama3.2:latest'),
-    fallbacks: [entry('openai', 'gpt-4o-mini', 20_000, 1)],
+    primary: entry('openai', 'gpt-4o-mini', 20_000, 1, 'gpt-4o-mini'),
+    fallbacks: [entry('ollama', 'llama3.2:latest', 20_000, 2)],
   },
   {
     purpose: 'interviewer_turn',
-    primary: entry('ollama', 'llama3.2:latest', 15_000, 2, 'llama3.2:latest'),
-    fallbacks: [entry('openai', 'gpt-4o-mini', 15_000, 1)],
+    primary: entry('openai', 'gpt-4o-mini', 15_000, 1, 'gpt-4o-mini'),
+    fallbacks: [entry('ollama', 'llama3.2:latest', 15_000, 2)],
   },
   {
     // Spec §2.6: the grader is a separate model from the interviewer and never sees the
-    // interviewer's reasoning -- only transcript, artifacts and rubric.
+    // interviewer's reasoning -- only transcript, artifacts and rubric. Grading is the
+    // quality-critical path, so it gets the stronger model and degrades to the cheaper one
+    // under the cost ceiling rather than starting there.
     purpose: 'grading',
-    primary: entry('ollama', 'llama3:latest', 45_000, 2, 'llama3.2:latest'),
-    fallbacks: [entry('openai', 'gpt-4o-mini', 30_000, 1)],
+    primary: entry('openai', 'gpt-4o', 30_000, 1, 'gpt-4o-mini'),
+    fallbacks: [entry('ollama', 'llama3:latest', 45_000, 2)],
   },
   {
     purpose: 'debrief',
-    primary: entry('ollama', 'llama3.2:latest', 30_000, 2, 'llama3.2:latest'),
-    fallbacks: [entry('openai', 'gpt-4o-mini', 20_000, 1)],
+    primary: entry('openai', 'gpt-4o-mini', 20_000, 1, 'gpt-4o-mini'),
+    fallbacks: [entry('ollama', 'llama3.2:latest', 30_000, 2)],
   },
   {
     purpose: 'asr',
@@ -89,4 +97,37 @@ export function lookup(purpose: Purpose): RegistryEntry {
 /** Interviewer and grader must never resolve to the same model (spec §2.6 grader separation). */
 export function graderIsSeparateFromInterviewer(): boolean {
   return lookup('grading').primary.model !== lookup('interviewer_turn').primary.model;
+}
+
+/** Every model declared for a purpose, best-first: the primary, then each fallback in turn. */
+export function chain(purpose: Purpose): readonly ModelEntry[] {
+  const found = lookup(purpose);
+  return [found.primary, ...found.fallbacks];
+}
+
+/**
+ * Answers "is this provider usable right now?" -- credentials present for a remote one, a
+ * reachable host for a local one. Async because reachability is a probe, not a constant.
+ */
+export type ProviderAvailability = (provider: string) => boolean | Promise<boolean>;
+
+/**
+ * The first declared model whose provider is actually usable, or null when none is.
+ *
+ * Call sites used to index `fallbacks[0]` and assume it was the OpenAI one, which silently
+ * tied the code to one particular ordering: reordering REGISTRY would have sent an Ollama
+ * model tag to OpenAI's API. Selecting by provider makes the ordering above the only thing
+ * that decides the tier, which is what a registry is for.
+ *
+ * Availability is probed in declaration order and stops at the first hit, so a deployment
+ * with a working primary never pays for probing a tier it will not use.
+ */
+export async function selectEntry(
+  purpose: Purpose,
+  available: ProviderAvailability,
+): Promise<ModelEntry | null> {
+  for (const candidate of chain(purpose)) {
+    if (await available(candidate.provider)) return candidate;
+  }
+  return null;
 }

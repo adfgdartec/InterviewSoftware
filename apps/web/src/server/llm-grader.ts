@@ -1,13 +1,11 @@
 import {
-  lookup,
-  ollamaReachable,
   openaiChat,
-  openaiConfigured,
   // index.ts aliases OpenAI's `chat` to `openaiChat` and re-exports Ollama's under its own
   // name, so the bare `chat` is the Ollama one. Aliased here so the call site says which.
   chat as ollamaChat,
 } from '@loopcraft/providers';
 import type { GraderSampler } from '@loopcraft/scoring';
+import { resolveModel, type ProviderProbes } from './model-tier.js';
 
 /**
  * The real grader. Until this existed every score in the product came from
@@ -20,9 +18,9 @@ import type { GraderSampler } from '@loopcraft/scoring';
  * aggregation in packages/scoring/src/grader.ts all already worked. Only the thing that
  * produced the numbers was fake.
  *
- * Provider follows registry.ts's `grading` entry: a local Ollama model first, OpenAI as the
- * fallback tier. On Workers, Ollama is unreachable, so the fallback is the real path -- which
- * is stated here rather than discovered from a bill.
+ * Provider follows registry.ts's `grading` entry, resolved per sample through
+ * `resolveModel`: the first declared provider that is actually usable. On Workers that is
+ * OpenAI; on a developer's machine with no key it is the local Ollama model, at no cost.
  */
 
 /**
@@ -45,26 +43,27 @@ function samplePreamble(sampleIndex: number): string {
 
 const GRADING = 'grading' as const;
 
-export interface LlmGraderOptions {
-  /** Overridden in tests. Defaults probe the real providers. */
-  readonly ollamaAvailable?: () => Promise<boolean>;
-}
+export type LlmGraderOptions = ProviderProbes;
 
 /**
- * Returns a sampler, or null when no provider is configured at all. Null is deliberate: the
- * debrief route already answers 503 `grader_unavailable` for a null sampler, which is an
- * honest "we cannot grade this right now" rather than a fabricated grade.
+ * Returns a sampler. It is never null at wiring time any more: whether a provider is usable
+ * is a per-call question (a key can be added, a local model can stop), so the sampler
+ * resolves it per sample and throws `GraderUnavailableError` when nothing is usable. The
+ * debrief route maps that to the same honest 503 `grader_unavailable` it always did, rather
+ * than a fabricated grade.
  */
-export function llmGraderSampler(options: LlmGraderOptions = {}): GraderSampler | null {
-  const entry = lookup(GRADING);
-  const probeOllama = options.ollamaAvailable ?? ollamaReachable;
-
-  if (!openaiConfigured()) {
-    // Ollama may still be up locally; the sampler checks per call rather than at wiring time,
-    // because a local model can come and go while the process lives.
-    if (entry.primary.provider !== 'ollama') return null;
+export class GraderUnavailableError extends Error {
+  // Same status and wire code the debrief route has always returned for an unconfigured
+  // grader, so the client contract is unchanged by where the check now happens.
+  readonly httpStatus = 503;
+  readonly code = 'grader_unavailable';
+  constructor() {
+    super('Grading is not configured.');
+    this.name = 'GraderUnavailableError';
   }
+}
 
+export function llmGraderSampler(options: LlmGraderOptions = {}): GraderSampler {
   return {
     async sample(prompt: string, temperature: number, sampleIndex: number): Promise<unknown> {
       const messages = [
@@ -72,26 +71,31 @@ export function llmGraderSampler(options: LlmGraderOptions = {}): GraderSampler 
         { role: 'user' as const, content: prompt },
       ];
 
-      const useOllama = entry.primary.provider === 'ollama' && (await probeOllama());
-      const raw = useOllama
-        ? await ollamaChat({
-            model: entry.primary.model,
-            messages,
-            temperature,
-            timeoutMs: entry.primary.timeoutMs,
-          },
-          // Same reason as the OpenAI branch: three coalesced samples are one sample.
-          false)
-        : await openaiChat(
-            {
-              model: entry.fallbacks[0]?.model ?? 'gpt-4o-mini',
-              messages,
-              temperature,
-              timeoutMs: entry.fallbacks[0]?.timeoutMs ?? 30_000,
-            },
-            // Never cacheable. See samplePreamble.
-            false,
-          );
+      const model = await resolveModel(GRADING, options);
+      if (model === null) throw new GraderUnavailableError();
+
+      // Never cacheable, on either branch. See samplePreamble: coalescing three identical
+      // prompts into one call would report perfect agreement it never measured.
+      const raw =
+        model.provider === 'ollama'
+          ? await ollamaChat(
+              {
+                model: model.model,
+                messages,
+                temperature,
+                timeoutMs: model.timeoutMs,
+              },
+              false,
+            )
+          : await openaiChat(
+              {
+                model: model.model,
+                messages,
+                temperature,
+                timeoutMs: model.timeoutMs,
+              },
+              false,
+            );
 
       return parseJsonObject(raw);
     },

@@ -31,6 +31,16 @@ interface DebriefAttribute {
   readonly lowInformation: boolean;
 }
 
+interface DebriefPresence {
+  readonly sampleCount: number;
+  readonly detectedCount: number;
+  readonly wellFramedRatio: number;
+  readonly driftEvents: number;
+  readonly longestWellFramedMs: number;
+  readonly roundCount: number;
+  readonly notes: readonly string[];
+}
+
 interface DebriefPacket {
   readonly overallDisplay: string;
   readonly overall: { median: number; intervalLow: number; intervalHigh: number };
@@ -39,10 +49,19 @@ interface DebriefPacket {
   readonly practiceFocus: readonly DebriefAttribute[];
   readonly methodNote: string;
   readonly calibrationLink: string;
+  /** Null whenever the session was not recorded on camera; the section is then absent. */
+  readonly presence: DebriefPresence | null;
 }
 
 async function readJson<T>(res: Response): Promise<T> {
   return (await res.json()) as T;
+}
+
+/** "4 min 20 s" from a millisecond duration; whole seconds under a minute. */
+function duration(ms: number): string {
+  const seconds = Math.round(ms / 1000);
+  if (seconds < 60) return `${seconds} s`;
+  return `${Math.floor(seconds / 60)} min ${seconds % 60} s`;
 }
 
 /** Position of a 1-5 score along the gauge track, clamped so 1.0 still shows a mark. */
@@ -354,6 +373,78 @@ export default function SessionPage({ params }: { params: Promise<{ id: string }
               No evidence was collected for {debrief.gaps.join(', ')} — reported as a gap rather
               than scored as zero.
             </p>
+          ) : null}
+
+          {/*
+            Camera framing. Deliberately outside "Every dimension" and carrying no score: it is
+            not graded, it does not move the overall number, and presenting it beside the
+            rubric scores would imply it did. The wording stays on the camera and the position
+            in frame, never on the candidate.
+          */}
+          {debrief.presence !== null ? (
+            <section aria-labelledby="framing-heading" className="mt-12">
+              <h3
+                id="framing-heading"
+                className="display border-b border-rule pb-2 text-xl text-plum-900"
+              >
+                Camera framing
+              </h3>
+              <p className="mt-3 max-w-[62ch] text-sm text-neutral-600">
+                Measured on your device across{' '}
+                {debrief.presence.roundCount === 1
+                  ? '1 round'
+                  : `${debrief.presence.roundCount} rounds`}
+                . No video left your machine, and this is not scored — it is setup advice.
+              </p>
+
+              <dl className="mt-5 grid grid-cols-2 gap-4 lg:grid-cols-4">
+                <div className="rounded-xl border border-rule bg-raised p-4">
+                  <dt className="label text-neutral-600">Well framed</dt>
+                  <dd className="display mt-1 text-2xl text-plum-900">
+                    {Math.round(debrief.presence.wellFramedRatio * 100)}%
+                  </dd>
+                </div>
+                <div className="rounded-xl border border-rule bg-raised p-4">
+                  <dt className="label text-neutral-600">Longest steady stretch</dt>
+                  <dd className="display mt-1 text-2xl text-plum-900">
+                    {duration(debrief.presence.longestWellFramedMs)}
+                  </dd>
+                </div>
+                <div className="rounded-xl border border-rule bg-raised p-4">
+                  <dt className="label text-neutral-600">Framing shifts</dt>
+                  <dd className="display mt-1 text-2xl text-plum-900">
+                    {debrief.presence.driftEvents}
+                  </dd>
+                </div>
+                <div className="rounded-xl border border-rule bg-raised p-4">
+                  <dt className="label text-neutral-600">In frame</dt>
+                  <dd className="display mt-1 text-2xl text-plum-900">
+                    {debrief.presence.sampleCount === 0
+                      ? '—'
+                      : `${Math.round(
+                          (debrief.presence.detectedCount / debrief.presence.sampleCount) * 100,
+                        )}%`}
+                  </dd>
+                </div>
+              </dl>
+
+              {debrief.presence.notes.length > 0 ? (
+                <ul className="mt-5 space-y-2">
+                  {debrief.presence.notes.map((note) => (
+                    <li
+                      key={note}
+                      className="border-l-2 border-rule-firm pl-4 text-sm text-neutral-600"
+                    >
+                      {note}
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="mt-5 border-l-2 border-rule-firm pl-4 text-sm text-neutral-600">
+                  Too few samples to say anything useful about your setup.
+                </p>
+              )}
+            </section>
           ) : null}
 
           <p className="mt-10">

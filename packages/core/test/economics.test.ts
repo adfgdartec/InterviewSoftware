@@ -40,8 +40,23 @@ const CONFIG: SessionCostConfig = {
   egressGigabytes: 0.4,
 };
 
-describe('rates file ships unpriced (guardrail 8)', () => {
-  it('has no invented prices committed', () => {
+/**
+ * Guardrail 8. The rule this enforces is "no price the cost model invented", not "no price at
+ * all": the rates that could be read from a vendor's own pricing page are committed, with the
+ * page and the plan tier recorded in rates-sources.md and the date in `asOf`.
+ *
+ * The two that remain null are the two no vendor page states in the units the model needs --
+ * Cartesia publishes credits and minutes rather than USD per character, and no compute host
+ * has been chosen to price a CPU-second against. They stay null precisely because guessing
+ * them is the failure this guardrail exists to catch.
+ */
+const UNPRICEABLE_WITHOUT_A_VENDOR_NUMBER = [
+  'ttsPerThousandCharacters',
+  'codeExecutionPerCpuSecond',
+];
+
+describe('rates file carries only prices read from a vendor (guardrail 8)', () => {
+  it('is still incomplete, so the margin gate cannot pass on a partial table', () => {
     expect(ratesAreComplete(RATES)).toBe(false);
   });
 
@@ -53,11 +68,47 @@ describe('rates file ships unpriced (guardrail 8)', () => {
     } catch (error) {
       expect(error).toBeInstanceOf(UnpricedDriverError);
       const paths = (error as UnpricedDriverError).paths;
-      expect(paths).toContain('asrPerMinute');
-      expect(paths).toContain('llm.grading.outputPerMillionTokens');
-      expect(paths).toContain('egressPerGigabyte');
-      expect(paths).toHaveLength(9);
+      expect([...paths].sort()).toEqual([...UNPRICEABLE_WITHOUT_A_VENDOR_NUMBER].sort());
     }
+  });
+
+  it('records the date every committed price was read on', () => {
+    // A price with no date is a price nobody can re-check. The vendor pages move.
+    expect(RATES.asOf).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+  });
+
+  it('carries every committed price as a positive number, never zero or a string', () => {
+    const committed: [string, unknown][] = [
+      ['asrPerMinute', RATES.asrPerMinute],
+      ['llm.questionGeneration.inputPerMillionTokens', RATES.llm.questionGeneration.inputPerMillionTokens],
+      ['llm.questionGeneration.outputPerMillionTokens', RATES.llm.questionGeneration.outputPerMillionTokens],
+      ['llm.grading.inputPerMillionTokens', RATES.llm.grading.inputPerMillionTokens],
+      ['llm.grading.outputPerMillionTokens', RATES.llm.grading.outputPerMillionTokens],
+      ['storagePerGigabyteMonth', RATES.storagePerGigabyteMonth],
+      ['egressPerGigabyte', RATES.egressPerGigabyte],
+      ['payment.percentOfTransaction', RATES.payment.percentOfTransaction],
+      ['payment.fixedPerTransaction', RATES.payment.fixedPerTransaction],
+    ];
+    for (const [path, value] of committed) {
+      expect(typeof value, path).toBe('number');
+      expect(value as number, path).toBeGreaterThan(0);
+    }
+  });
+
+  it('prices grading above question generation, matching the registry it costs', () => {
+    // registry.ts puts grading on the stronger model and generation on the cheaper one. A
+    // rates table where grading is the cheaper line is a table filled against the wrong tier.
+    expect(RATES.llm.grading.inputPerMillionTokens!).toBeGreaterThan(
+      RATES.llm.questionGeneration.inputPerMillionTokens!,
+    );
+    expect(RATES.llm.grading.outputPerMillionTokens!).toBeGreaterThan(
+      RATES.llm.questionGeneration.outputPerMillionTokens!,
+    );
+  });
+
+  it('keeps the payment percentage a fraction, not a whole-number percent', () => {
+    // 2.9 instead of 0.029 would overstate the fee by 100x and still look plausible.
+    expect(RATES.payment.percentOfTransaction!).toBeLessThan(1);
   });
 });
 

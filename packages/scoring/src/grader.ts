@@ -199,12 +199,28 @@ export async function gradeRound(
   }
   const prompt = buildGraderPrompt(rubric, transcript);
 
+  // The samples are INDEPENDENT by construction (see the sampler's own notes on why they
+  // must not be coalesced), so running them one after another only ever added latency: a
+  // five-round loop is fifteen grading calls, and serially that was minutes of a candidate
+  // watching a spinner. Issued together, a round costs one call's wall time, not three.
+  const settled = await Promise.allSettled(
+    Array.from({ length: sampleCount }, (_, i) =>
+      sampler.sample(prompt, GRADER_TEMPERATURE, i + 1),
+    ),
+  );
+
   const collected: GraderResponse[] = [];
-  for (let i = 0; i < sampleCount; i += 1) {
+  for (const outcome of settled) {
+    if (outcome.status === 'rejected') {
+      // A contract violation is discarded, as it always was. Anything else -- a transport
+      // failure, a missing credential -- is not the grader misunderstanding the task, and
+      // must not be laundered into a thinner-but-valid grade. Results are walked in sample
+      // order so which error surfaces does not depend on which call happened to lose a race.
+      if (!(outcome.reason instanceof GraderContractError)) throw outcome.reason;
+      continue;
+    }
     try {
-      collected.push(
-        parseSample(await sampler.sample(prompt, GRADER_TEMPERATURE, i + 1), rubric, transcript),
-      );
+      collected.push(parseSample(outcome.value, rubric, transcript));
     } catch (error) {
       if (!(error instanceof GraderContractError)) throw error;
     }

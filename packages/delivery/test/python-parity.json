@@ -1,0 +1,545 @@
+[
+  {
+    "name": "happy path",
+    "input": {
+      "transcript": "In that situation I was responsible for the launch. So I built a new pipeline and reduced errors by 40%. I think that was the best outcome we achieved as a result.",
+      "words": [
+        {
+          "word": "in",
+          "startMs": 0,
+          "endMs": 100
+        },
+        {
+          "word": "that",
+          "startMs": 100,
+          "endMs": 300
+        },
+        {
+          "word": "situation",
+          "startMs": 300,
+          "endMs": 600
+        },
+        {
+          "word": "um",
+          "startMs": 600,
+          "endMs": 800
+        },
+        {
+          "word": "i",
+          "startMs": 2800,
+          "endMs": 2900
+        },
+        {
+          "word": "was",
+          "startMs": 2900,
+          "endMs": 3100
+        }
+      ],
+      "promptEndMs": 0
+    },
+    "expected": {
+      "fillerRatio": 0.0,
+      "hedgingDensity": 3.125,
+      "longestMonologueSeconds": 3.1,
+      "pauseLengthP50Ms": 0.0,
+      "pauseLengthP95Ms": 1599.9999999999995,
+      "quantificationDensity": 3.125,
+      "responseLatencyMs": 0.0,
+      "starSegmentCoverage": 1.0,
+      "wordsPerMinute": 116.12903225806451
+    }
+  },
+  {
+    "name": "empty",
+    "input": {
+      "transcript": "",
+      "words": [],
+      "promptEndMs": 0
+    },
+    "expected": {
+      "fillerRatio": 0.0,
+      "hedgingDensity": 0.0,
+      "longestMonologueSeconds": 0.0,
+      "pauseLengthP50Ms": 0.0,
+      "pauseLengthP95Ms": 0.0,
+      "quantificationDensity": 0.0,
+      "responseLatencyMs": 0.0,
+      "starSegmentCoverage": 0.0,
+      "wordsPerMinute": 0.0
+    }
+  },
+  {
+    "name": "single word",
+    "input": {
+      "transcript": "hello",
+      "words": [
+        {
+          "word": "hello",
+          "startMs": 100,
+          "endMs": 500
+        }
+      ],
+      "promptEndMs": 50
+    },
+    "expected": {
+      "fillerRatio": 0.0,
+      "hedgingDensity": 0.0,
+      "longestMonologueSeconds": 0.4,
+      "pauseLengthP50Ms": 0.0,
+      "pauseLengthP95Ms": 0.0,
+      "quantificationDensity": 0.0,
+      "responseLatencyMs": 50.0,
+      "starSegmentCoverage": 0.0,
+      "wordsPerMinute": 0.0
+    }
+  },
+  {
+    "name": "zero length word",
+    "input": {
+      "transcript": "hi",
+      "words": [
+        {
+          "word": "hi",
+          "startMs": 1000,
+          "endMs": 1000
+        }
+      ],
+      "promptEndMs": 1000
+    },
+    "expected": {
+      "fillerRatio": 0.0,
+      "hedgingDensity": 0.0,
+      "longestMonologueSeconds": 0.0,
+      "pauseLengthP50Ms": 0.0,
+      "pauseLengthP95Ms": 0.0,
+      "quantificationDensity": 0.0,
+      "responseLatencyMs": 0.0,
+      "starSegmentCoverage": 0.0,
+      "wordsPerMinute": 0.0
+    }
+  },
+  {
+    "name": "fillers and hedges",
+    "input": {
+      "transcript": "Um, like, I think basically we literally actually maybe sort of kind of shipped it.",
+      "words": [
+        {
+          "word": "um",
+          "startMs": 0,
+          "endMs": 200
+        },
+        {
+          "word": "like",
+          "startMs": 200,
+          "endMs": 400
+        }
+      ],
+      "promptEndMs": 100
+    },
+    "expected": {
+      "fillerRatio": 0.3333333333333333,
+      "hedgingDensity": 26.666666666666668,
+      "longestMonologueSeconds": 0.4,
+      "pauseLengthP50Ms": 0.0,
+      "pauseLengthP95Ms": 0.0,
+      "quantificationDensity": 0.0,
+      "responseLatencyMs": 0.0,
+      "starSegmentCoverage": 0.0,
+      "wordsPerMinute": 300.0
+    }
+  },
+  {
+    "name": "numbers",
+    "input": {
+      "transcript": "We cut latency 12.5% and 40 percent and 7 and 3.25 across 2 regions.",
+      "words": [
+        {
+          "word": "we",
+          "startMs": 0,
+          "endMs": 100
+        },
+        {
+          "word": "cut",
+          "startMs": 100,
+          "endMs": 250
+        }
+      ],
+      "promptEndMs": 0
+    },
+    "expected": {
+      "fillerRatio": 0.0,
+      "hedgingDensity": 0.0,
+      "longestMonologueSeconds": 0.25,
+      "pauseLengthP50Ms": 0.0,
+      "pauseLengthP95Ms": 0.0,
+      "quantificationDensity": 35.714285714285715,
+      "responseLatencyMs": 0.0,
+      "starSegmentCoverage": 0.0,
+      "wordsPerMinute": 480.0
+    }
+  },
+  {
+    "name": "long pauses",
+    "input": {
+      "transcript": "one two three four five",
+      "words": [
+        {
+          "word": "one",
+          "startMs": 0,
+          "endMs": 200
+        },
+        {
+          "word": "two",
+          "startMs": 5000,
+          "endMs": 5200
+        },
+        {
+          "word": "three",
+          "startMs": 5200,
+          "endMs": 5400
+        },
+        {
+          "word": "four",
+          "startMs": 12000,
+          "endMs": 12200
+        },
+        {
+          "word": "five",
+          "startMs": 12200,
+          "endMs": 12400
+        }
+      ],
+      "promptEndMs": 0
+    },
+    "expected": {
+      "fillerRatio": 0.0,
+      "hedgingDensity": 0.0,
+      "longestMonologueSeconds": 0.4,
+      "pauseLengthP50Ms": 2400.0,
+      "pauseLengthP95Ms": 6329.999999999999,
+      "quantificationDensity": 0.0,
+      "responseLatencyMs": 0.0,
+      "starSegmentCoverage": 0.0,
+      "wordsPerMinute": 24.193548387096776
+    }
+  },
+  {
+    "name": "unordered input",
+    "input": {
+      "transcript": "b a c",
+      "words": [
+        {
+          "word": "c",
+          "startMs": 900,
+          "endMs": 1000
+        },
+        {
+          "word": "a",
+          "startMs": 0,
+          "endMs": 100
+        },
+        {
+          "word": "b",
+          "startMs": 400,
+          "endMs": 500
+        }
+      ],
+      "promptEndMs": 50
+    },
+    "expected": {
+      "fillerRatio": 0.0,
+      "hedgingDensity": 0.0,
+      "longestMonologueSeconds": 1.0,
+      "pauseLengthP50Ms": 350.0,
+      "pauseLengthP95Ms": 395.0,
+      "quantificationDensity": 0.0,
+      "responseLatencyMs": 0.0,
+      "starSegmentCoverage": 0.0,
+      "wordsPerMinute": 180.0
+    }
+  },
+  {
+    "name": "latency negative clamps",
+    "input": {
+      "transcript": "early start",
+      "words": [
+        {
+          "word": "early",
+          "startMs": 100,
+          "endMs": 200
+        },
+        {
+          "word": "start",
+          "startMs": 300,
+          "endMs": 400
+        }
+      ],
+      "promptEndMs": 5000
+    },
+    "expected": {
+      "fillerRatio": 0.0,
+      "hedgingDensity": 0.0,
+      "longestMonologueSeconds": 0.3,
+      "pauseLengthP50Ms": 100.0,
+      "pauseLengthP95Ms": 100.0,
+      "quantificationDensity": 0.0,
+      "responseLatencyMs": 0.0,
+      "starSegmentCoverage": 0.0,
+      "wordsPerMinute": 400.0
+    }
+  },
+  {
+    "name": "star full",
+    "input": {
+      "transcript": "The context at the time: my job was to fix it. So I built a fix. As a result we achieved a 30% drop.",
+      "words": [
+        {
+          "word": "the",
+          "startMs": 0,
+          "endMs": 100
+        },
+        {
+          "word": "context",
+          "startMs": 100,
+          "endMs": 300
+        }
+      ],
+      "promptEndMs": 0
+    },
+    "expected": {
+      "fillerRatio": 0.0,
+      "hedgingDensity": 0.0,
+      "longestMonologueSeconds": 0.3,
+      "pauseLengthP50Ms": 0.0,
+      "pauseLengthP95Ms": 0.0,
+      "quantificationDensity": 4.166666666666666,
+      "responseLatencyMs": 0.0,
+      "starSegmentCoverage": 1.0,
+      "wordsPerMinute": 400.0
+    }
+  },
+  {
+    "name": "star none",
+    "input": {
+      "transcript": "Nothing relevant here at all whatsoever.",
+      "words": [
+        {
+          "word": "nothing",
+          "startMs": 0,
+          "endMs": 100
+        },
+        {
+          "word": "relevant",
+          "startMs": 100,
+          "endMs": 300
+        }
+      ],
+      "promptEndMs": 0
+    },
+    "expected": {
+      "fillerRatio": 0.0,
+      "hedgingDensity": 0.0,
+      "longestMonologueSeconds": 0.3,
+      "pauseLengthP50Ms": 0.0,
+      "pauseLengthP95Ms": 0.0,
+      "quantificationDensity": 0.0,
+      "responseLatencyMs": 0.0,
+      "starSegmentCoverage": 0.0,
+      "wordsPerMinute": 400.0
+    }
+  },
+  {
+    "name": "whitespace only",
+    "input": {
+      "transcript": "     ",
+      "words": [],
+      "promptEndMs": 0
+    },
+    "expected": {
+      "fillerRatio": 0.0,
+      "hedgingDensity": 0.0,
+      "longestMonologueSeconds": 0.0,
+      "pauseLengthP50Ms": 0.0,
+      "pauseLengthP95Ms": 0.0,
+      "quantificationDensity": 0.0,
+      "responseLatencyMs": 0.0,
+      "starSegmentCoverage": 0.0,
+      "wordsPerMinute": 0.0
+    }
+  },
+  {
+    "name": "repeated hedge",
+    "input": {
+      "transcript": "I think I think I think we might be probably possibly not sure.",
+      "words": [
+        {
+          "word": "i",
+          "startMs": 0,
+          "endMs": 100
+        },
+        {
+          "word": "think",
+          "startMs": 100,
+          "endMs": 200
+        }
+      ],
+      "promptEndMs": 0
+    },
+    "expected": {
+      "fillerRatio": 0.0,
+      "hedgingDensity": 53.84615384615385,
+      "longestMonologueSeconds": 0.2,
+      "pauseLengthP50Ms": 0.0,
+      "pauseLengthP95Ms": 0.0,
+      "quantificationDensity": 0.0,
+      "responseLatencyMs": 0.0,
+      "starSegmentCoverage": 0.0,
+      "wordsPerMinute": 600.0
+    }
+  },
+  {
+    "name": "many words",
+    "input": {
+      "transcript": "we shipped it and reduced latency by 12 percent. we shipped it and reduced latency by 12 percent.",
+      "words": [
+        {
+          "word": "w0",
+          "startMs": 0,
+          "endMs": 250
+        },
+        {
+          "word": "w1",
+          "startMs": 300,
+          "endMs": 550
+        },
+        {
+          "word": "w2",
+          "startMs": 600,
+          "endMs": 850
+        },
+        {
+          "word": "w3",
+          "startMs": 900,
+          "endMs": 1150
+        },
+        {
+          "word": "w4",
+          "startMs": 3200,
+          "endMs": 3450
+        },
+        {
+          "word": "w5",
+          "startMs": 3500,
+          "endMs": 3750
+        }
+      ],
+      "promptEndMs": 200
+    },
+    "expected": {
+      "fillerRatio": 0.0,
+      "hedgingDensity": 0.0,
+      "longestMonologueSeconds": 1.15,
+      "pauseLengthP50Ms": 50.0,
+      "pauseLengthP95Ms": 1649.9999999999995,
+      "quantificationDensity": 11.11111111111111,
+      "responseLatencyMs": 0.0,
+      "starSegmentCoverage": 0.0,
+      "wordsPerMinute": 96.0
+    }
+  },
+  {
+    "name": "identical timestamps",
+    "input": {
+      "transcript": "a b c",
+      "words": [
+        {
+          "word": "a",
+          "startMs": 1000,
+          "endMs": 1000
+        },
+        {
+          "word": "b",
+          "startMs": 1000,
+          "endMs": 1000
+        },
+        {
+          "word": "c",
+          "startMs": 1000,
+          "endMs": 1000
+        }
+      ],
+      "promptEndMs": 0
+    },
+    "expected": {
+      "fillerRatio": 0.0,
+      "hedgingDensity": 0.0,
+      "longestMonologueSeconds": 0.0,
+      "pauseLengthP50Ms": 0.0,
+      "pauseLengthP95Ms": 0.0,
+      "quantificationDensity": 0.0,
+      "responseLatencyMs": 1000.0,
+      "starSegmentCoverage": 0.0,
+      "wordsPerMinute": 0.0
+    }
+  },
+  {
+    "name": "apostrophes",
+    "input": {
+      "transcript": "I don't think it's basically like a problem, y'know.",
+      "words": [
+        {
+          "word": "i",
+          "startMs": 0,
+          "endMs": 100
+        },
+        {
+          "word": "dont",
+          "startMs": 100,
+          "endMs": 200
+        }
+      ],
+      "promptEndMs": 0
+    },
+    "expected": {
+      "fillerRatio": 0.2222222222222222,
+      "hedgingDensity": 0.0,
+      "longestMonologueSeconds": 0.2,
+      "pauseLengthP50Ms": 0.0,
+      "pauseLengthP95Ms": 0.0,
+      "quantificationDensity": 0.0,
+      "responseLatencyMs": 0.0,
+      "starSegmentCoverage": 0.0,
+      "wordsPerMinute": 600.0
+    }
+  },
+  {
+    "name": "uppercase fillers",
+    "input": {
+      "transcript": "UM, LIKE, ACTUALLY we BASICALLY shipped.",
+      "words": [
+        {
+          "word": "um",
+          "startMs": 0,
+          "endMs": 100
+        },
+        {
+          "word": "like",
+          "startMs": 100,
+          "endMs": 200
+        }
+      ],
+      "promptEndMs": 0
+    },
+    "expected": {
+      "fillerRatio": 0.6666666666666666,
+      "hedgingDensity": 0.0,
+      "longestMonologueSeconds": 0.2,
+      "pauseLengthP50Ms": 0.0,
+      "pauseLengthP95Ms": 0.0,
+      "quantificationDensity": 0.0,
+      "responseLatencyMs": 0.0,
+      "starSegmentCoverage": 0.0,
+      "wordsPerMinute": 600.0
+    }
+  }
+]
