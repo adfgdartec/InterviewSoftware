@@ -157,8 +157,10 @@ function round2(value: number): number {
 }
 
 /**
- * Advice, strictly about camera geometry. Every string here describes the CAMERA or a
- * position, never the person -- "you were off-centre" is framing, "you seemed distracted"
+ * Advice, strictly about camera geometry. Worded without naming "the round", because
+ * `combinePresence` re-derives these over a whole session as well: a note that said "for most
+ * of the round" appeared in a debrief summarising two of them. Every string here describes
+ * the CAMERA or a position, never the person -- "you were off-centre" is framing, "you seemed distracted"
  * would be an inference this product does not make and its lint rule would reject.
  */
 function notesFor(s: SummaryFacts): string[] {
@@ -167,15 +169,15 @@ function notesFor(s: SummaryFacts): string[] {
   const notes: string[] = [];
   const detectionRatio = ratio(s.detectedCount, s.sampleCount);
   if (detectionRatio < 0.5) {
-    notes.push('You were out of frame for much of the round. Check the camera can see you.');
+    notes.push('You were out of frame much of the time. Check the camera can see you.');
     return notes;
   }
 
   if (s.wellFramedRatio >= WELL_FRAMED_TARGET) {
-    notes.push('Your framing held steady for most of the round.');
+    notes.push('Your framing held steady most of the time.');
   }
   if (s.offCenterRatio >= RECURRING_ISSUE_THRESHOLD) {
-    notes.push('You sat left or right of centre for a good part of the round.');
+    notes.push('You sat left or right of centre a good part of the time.');
   }
   if (s.distanceOffRatio >= RECURRING_ISSUE_THRESHOLD) {
     notes.push('Your distance from the camera drifted outside a comfortable range.');

@@ -36,7 +36,7 @@ describe('summarizePresence', () => {
     expect(s.driftEvents).toBe(0);
     // 20 samples at 500ms: the run spans from t=0 to t=9500.
     expect(s.longestWellFramedMs).toBe(9_500);
-    expect(s.notes).toContain('Your framing held steady for most of the round.');
+    expect(s.notes).toContain('Your framing held steady most of the time.');
   });
 
   it('computes issue ratios against DETECTED samples, not all samples', () => {
