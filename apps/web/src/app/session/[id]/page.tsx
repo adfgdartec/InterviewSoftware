@@ -283,7 +283,14 @@ export default function SessionPage({ params }: { params: Promise<{ id: string }
         <section className="mx-auto max-w-xl py-10 text-center">
           <p className="label text-plum-500">Loop complete</p>
           <h2 className="display mt-3 text-plum-900 text-[length:var(--text-display-s)]">
-            {view.answeredTurnCount} rounds answered
+            {/*
+              Rounds and answers are not the same number. This read `answeredTurnCount`
+              rounds, which was only ever right while the interviewer accepted every answer
+              on the first try -- once it actually asks follow-ups, a five-round loop reports
+              "9 rounds answered". Say both, and say which is which.
+            */}
+            {view.roundCount} {view.roundCount === 1 ? 'round' : 'rounds'}, answered in{' '}
+            {view.answeredTurnCount} {view.answeredTurnCount === 1 ? 'turn' : 'turns'}
           </h2>
           <p className="mt-4 text-neutral-600">
             Grading runs three independent samples per dimension, so this takes a moment.

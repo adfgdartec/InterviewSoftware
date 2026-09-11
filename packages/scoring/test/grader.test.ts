@@ -3,6 +3,8 @@ import { rubricById, findBannedTokensInText } from '@loopcraft/core';
 import {
   GRADER_SAMPLE_COUNT,
   GRADER_TEMPERATURE,
+  MAX_EVIDENCE_QUOTE_CHARS,
+  REQUESTED_EVIDENCE_QUOTE_CHARS,
   GraderContractError,
   buildGraderPrompt,
   gradeRound,
@@ -281,5 +283,82 @@ describe('grading issues its samples concurrently', () => {
       },
     });
     await expect(grading).rejects.toThrow('second');
+  });
+});
+
+/**
+ * Both of these were found by running a real five-round loop against gpt-4o: the debrief
+ * returned 500 `internal_error` because every sample of two rounds was discarded. Neither
+ * rejection was a bad grade -- both were the contract refusing evidence the candidate really
+ * had said. A sample discarded for a false reason costs money and silently narrows the
+ * interval, which is the exact failure the levelValue preprocessor was written to stop.
+ */
+describe('the contract does not reject evidence the candidate actually gave', () => {
+  const RUBRIC = rubricById('ml-systems.design.v1')!;
+  const dimensionId = RUBRIC.dimensions[0]!.id;
+
+  function sampleWith(quote: string): unknown {
+    return { dimensions: [{ dimension: dimensionId, level: 3, evidenceQuote: quote }] };
+  }
+
+  it('accepts an excerpt the grader ended early with a full stop', () => {
+    // The answer runs on with a comma; the grader cut its excerpt and terminated it.
+    const transcript = 'A: I sharded the writes across replicas, and drained them to S3.';
+    const parsed = parseSample(
+      sampleWith('I sharded the writes across replicas.'),
+      RUBRIC,
+      transcript,
+    );
+    expect(parsed.dimensions[0]?.evidenceQuote).toBe('I sharded the writes across replicas.');
+  });
+
+  it('accepts an excerpt wrapped in ellipses or quotation marks', () => {
+    const transcript = 'A: I sharded the writes across replicas, and drained them to S3.';
+    for (const quote of [
+      '...sharded the writes across replicas...',
+      '"I sharded the writes across replicas"',
+      '  I sharded the writes across replicas;  ',
+    ]) {
+      expect(() => parseSample(sampleWith(quote), RUBRIC, transcript)).not.toThrow();
+    }
+  });
+
+  it('accepts a long but genuine quote, up to the hard ceiling', () => {
+    const body = 'I sharded the writes across replicas and drained them to object storage. '
+      .repeat(9)
+      .trim();
+    expect(body.length).toBeGreaterThan(600); // what the old cap rejected outright
+    expect(body.length).toBeLessThanOrEqual(MAX_EVIDENCE_QUOTE_CHARS);
+    expect(() => parseSample(sampleWith(body), RUBRIC, `A: ${body}`)).not.toThrow();
+  });
+
+  it('still refuses a quote past the ceiling, so the whole answer is not "evidence"', () => {
+    const huge = 'x'.repeat(MAX_EVIDENCE_QUOTE_CHARS + 1);
+    expect(() => parseSample(sampleWith(huge), RUBRIC, `A: ${huge}`)).toThrow(GraderContractError);
+  });
+
+  it('asks for a shorter quote than it will accept, so an overshoot is not fatal', () => {
+    expect(REQUESTED_EVIDENCE_QUOTE_CHARS).toBeLessThan(MAX_EVIDENCE_QUOTE_CHARS);
+    expect(buildGraderPrompt(RUBRIC, 'A: hi')).toContain(String(REQUESTED_EVIDENCE_QUOTE_CHARS));
+  });
+
+  it('still rejects a paraphrase -- edge trimming forgives punctuation, not wording', () => {
+    const transcript = 'A: I sharded the writes across replicas, and drained them to S3.';
+    expect(() =>
+      parseSample(sampleWith('The candidate distributed the writes.'), RUBRIC, transcript),
+    ).toThrow(GraderContractError);
+  });
+
+  it('still rejects a rubric anchor passed off as a quote', () => {
+    const anchor = RUBRIC.dimensions[0]!.anchors[0]!.anchor;
+    expect(() =>
+      parseSample(sampleWith(anchor), RUBRIC, 'A: I sharded the writes across replicas.'),
+    ).toThrow(GraderContractError);
+  });
+
+  it('rejects a quote that is nothing but punctuation', () => {
+    expect(() => parseSample(sampleWith('"..."'), RUBRIC, 'A: I sharded the writes.')).toThrow(
+      GraderContractError,
+    );
   });
 });
