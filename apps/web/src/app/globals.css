@@ -53,6 +53,13 @@
 
   --text-display: clamp(2.75rem, 6.5vw, 4.25rem);
   --text-display-s: clamp(2rem, 4.5vw, 2.875rem);
+  /* Two more rungs below display-s, for text that is SET at display weight but is too long
+     to survive display size. A 270-character interview question at --text-display-s filled
+     a 1280x1100 viewport with seven lines of serif and read as a manifesto rather than a
+     question; the round's actual controls were pushed below the fold. Length picks the rung
+     (see questionSizeClass in the session page) -- the face and colour do not change. */
+  --text-display-xs: clamp(1.5rem, 2.6vw, 1.9rem);
+  --text-display-2xs: clamp(1.25rem, 2vw, 1.5rem);
 
   --ease-out: cubic-bezier(0.2, 0.7, 0.3, 1);
   --ease-in-out: cubic-bezier(0.6, 0, 0.3, 1);

@@ -57,6 +57,20 @@ async function readJson<T>(res: Response): Promise<T> {
   return (await res.json()) as T;
 }
 
+/**
+ * The question is set at display weight, but display SIZE only suits a short question.
+ * Generated questions run long -- one measured 270 characters, which at --text-display-s
+ * filled the viewport with seven lines of serif and pushed the answer box below the fold.
+ *
+ * Length picks the rung. Nothing else changes: same face, same colour, same measure.
+ */
+function questionSizeClass(question: string): string {
+  const n = question.trim().length;
+  if (n <= 80) return 'text-[length:var(--text-display-s)]';
+  if (n <= 160) return 'text-[length:var(--text-display-xs)]';
+  return 'text-[length:var(--text-display-2xs)]';
+}
+
 /** "4 min 20 s" from a millisecond duration; whole seconds under a minute. */
 function duration(ms: number): string {
   const seconds = Math.round(ms / 1000);
@@ -217,11 +231,51 @@ export default function SessionPage({ params }: { params: Promise<{ id: string }
             <h2 id="question-heading" className="label text-gold-600">
               Question
             </h2>
-            <p className="display mt-5 max-w-[26ch] text-balance text-[length:var(--text-display-s)] text-room-ink sm:max-w-[34ch]">
+            <p
+              className={`display mt-5 max-w-[46ch] text-balance leading-[1.25] text-room-ink ${questionSizeClass(view.question ?? '')}`}
+            >
               {view.question}
             </p>
             <QuestionAudio sessionId={id} questionText={view.question ?? ''} />
           </section>
+
+          {view.videoEligible ? (
+            <div className="border-t border-room-rule px-5 py-4 sm:px-8">
+              {/* Keyed on the round so each round is measured separately -- blending two
+                  rounds' samples would report a framing habit that never happened. */}
+              <CameraPresence
+                roundKey={`${view.sessionId}:${view.currentRoundPosition}`}
+                onSummary={(summary) => {
+                  // Nine numbers, computed in the browser. Fire-and-forget: framing advice
+                  // must never be able to block or fail an interview answer.
+                  if (view.currentRoundId === null) return;
+                  void fetch(`/api/sessions/${id}/presence`, {
+                    method: 'POST',
+                    headers: {
+                      'content-type': 'application/json',
+                      'idempotency-key': crypto.randomUUID(),
+                    },
+                    body: JSON.stringify({ roundId: view.currentRoundId, ...summary }),
+                  }).catch(() => {});
+                }}
+              />
+            </div>
+          ) : (
+            /* Eligibility is decided server-side from region, age band and the stored
+               opt-in. Rendering nothing at all -- which is what this did -- left a video
+               product with no camera and no explanation for its absence. */
+            <div className="border-t border-room-rule px-5 py-4 sm:px-8">
+              <p className="label text-room-ink-2">Camera</p>
+              <p className="mt-1 max-w-[60ch] text-sm text-room-ink-2">
+                Camera framing is off for this account. It needs your region and age band on
+                file, and the camera setting switched on.{' '}
+                <a href="/settings" className="underline underline-offset-2 hover:text-room-ink">
+                  Open settings
+                </a>
+                .
+              </p>
+            </div>
+          )}
 
           <div className="border-t border-room-rule px-5 py-6 sm:px-8">
             <label htmlFor="answer" className="label block text-room-ink-2">
@@ -253,29 +307,6 @@ export default function SessionPage({ params }: { params: Promise<{ id: string }
               </button>
             </div>
           </div>
-
-          {view.videoEligible ? (
-            <div className="border-t border-room-rule px-5 py-4 sm:px-8">
-              {/* Keyed on the round so each round is measured separately -- blending two
-                  rounds' samples would report a framing habit that never happened. */}
-              <CameraPresence
-                roundKey={`${view.sessionId}:${view.currentRoundPosition}`}
-                onSummary={(summary) => {
-                  // Nine numbers, computed in the browser. Fire-and-forget: framing advice
-                  // must never be able to block or fail an interview answer.
-                  if (view.currentRoundId === null) return;
-                  void fetch(`/api/sessions/${id}/presence`, {
-                    method: 'POST',
-                    headers: {
-                      'content-type': 'application/json',
-                      'idempotency-key': crypto.randomUUID(),
-                    },
-                    body: JSON.stringify({ roundId: view.currentRoundId, ...summary }),
-                  }).catch(() => {});
-                }}
-              />
-            </div>
-          ) : null}
         </div>
       ) : null}
 

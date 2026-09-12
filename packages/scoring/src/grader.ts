@@ -90,6 +90,12 @@ export function buildGraderPrompt(rubric: Rubric, transcript: string): string {
     '  did, and do NOT restate the anchor text above -- those are the levels, not the evidence.',
     '  If a dimension has no supporting words in the transcript, quote the closest thing the',
     '  candidate actually said and score the low level it evidences.',
+    // A real debrief printed the same sentence under five different dimensions, which makes
+    // the evidence look decorative rather than diagnostic -- the whole point of the quote is
+    // that it shows WHY this dimension scored what it did.
+    '- Use a DIFFERENT span for each dimension. If two dimensions would quote the same words,',
+    '  the second one is not evidenced by them: quote what actually bears on that dimension,',
+    '  or quote the nearest thing and score it low.',
     `- Keep evidenceQuote under ${REQUESTED_EVIDENCE_QUOTE_CHARS} characters -- one or two`,
     '  sentences. Quote the span that shows the level, not the whole answer.',
     '- Do not describe or infer the candidate\'s internal state. If you cannot quote evidence',

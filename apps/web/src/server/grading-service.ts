@@ -162,9 +162,11 @@ async function persistGrade(
   for (const dim of grade.dimensions) {
     await tx`
       insert into score_dimensions (org_id, score_id, dimension, median_score,
-                                    interval_low, interval_high, evidence_quote)
+                                    interval_low, interval_high, evidence_quote,
+                                    sample_variance, sample_count)
       values (${orgId}, ${scoreId}, ${dim.dimension}, ${dim.median},
-              ${dim.intervalLow}, ${dim.intervalHigh}, ${dim.evidenceQuote})
+              ${dim.intervalLow}, ${dim.intervalHigh}, ${dim.evidenceQuote},
+              ${dim.sampleVariance}, ${dim.sampleCount})
       on conflict (score_id, dimension) do nothing`;
   }
 }
@@ -180,7 +182,8 @@ export async function loadDebrief(
     select s.round_id, s.rubric_id, s.median_score, s.interval_low, s.interval_high,
            s.sample_variance, s.sample_count,
            d.dimension, d.median_score as dim_median, d.interval_low as dim_low,
-           d.interval_high as dim_high, d.evidence_quote
+           d.interval_high as dim_high, d.evidence_quote,
+           d.sample_variance as dim_variance, d.sample_count as dim_samples
     from scores s
     join rounds r on r.id = s.round_id
     left join score_dimensions d on d.score_id = s.id
@@ -208,14 +211,25 @@ export async function loadDebrief(
         const median = Number(r['dim_median']);
         const low = Number(r['dim_low']);
         const high = Number(r['dim_high']);
+        // Each dimension's OWN spread. This used to read the round-level figure off `head`,
+        // so a round whose overall score was contested printed "the three samples disagreed"
+        // under every dimension -- including ones all three samples scored identically.
+        // Rows written before migration 0011 have no per-dimension figure; those, and only
+        // those, still fall back to the round's.
+        const variance = r['dim_variance'];
+        const samples = r['dim_samples'];
         return {
           dimension: String(r['dimension']),
           evidenceQuote: r['evidence_quote'] === null ? '' : String(r['evidence_quote']),
           median,
           intervalLow: low,
           intervalHigh: high,
-          sampleVariance: Number(head['sample_variance']),
-          sampleCount: Number(head['sample_count']),
+          sampleVariance: variance === null || variance === undefined
+            ? Number(head['sample_variance'])
+            : Number(variance),
+          sampleCount: samples === null || samples === undefined
+            ? Number(head['sample_count'])
+            : Number(samples),
           halfWidth: Math.round(((high - low) / 2) * 100) / 100,
         };
       });

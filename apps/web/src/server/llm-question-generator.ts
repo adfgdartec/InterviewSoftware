@@ -38,6 +38,12 @@ function buildPrompt(request: QuestionRequest, rubric: Rubric, seniority: string
     '',
     'Requirements:',
     '- One question. No preamble, no numbering, no quotation marks around it.',
+    // Generated questions drifted into 250-character run-ons that bolted three asks together
+    // with "including..." and "and what...", which is not how anyone interviews out loud and
+    // is unreadable at display size. One ask, short enough to be said in a breath.
+    '- Under 30 words, and ONE ask. Do not chain sub-questions with "including", "as well as",',
+    '  or "and what". If the rubric needs more, ask the sharpest part and let the follow-up',
+    '  come later -- the interviewer asks follow-ups of its own.',
     '- Concrete and specific enough that a vague answer is obviously vague.',
     '- Answerable out loud in a few minutes. Do not ask for code to be written out.',
     '- Ask about the candidate\'s own work, reasoning or choices.',
