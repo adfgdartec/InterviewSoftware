@@ -1,8 +1,10 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { rubricById, findBannedTokensInText } from '@loopcraft/core';
 import {
   GRADER_SAMPLE_COUNT,
   GRADER_TEMPERATURE,
+  MAX_EVIDENCE_QUOTE_CHARS,
+  REQUESTED_EVIDENCE_QUOTE_CHARS,
   GraderContractError,
   buildGraderPrompt,
   gradeRound,
@@ -189,5 +191,174 @@ describe('gradeRound', () => {
     const agree = await gradeRound(RUBRIC, TRANSCRIPT, samplerReturning(verdicts([3, 3, 3, 3])));
     const spread = await gradeRound(RUBRIC, TRANSCRIPT, samplerReturning(verdicts([1, 2, 4, 5])));
     expect(spread.overall.halfWidth).toBeGreaterThan(agree.overall.halfWidth);
+  });
+});
+
+/**
+ * The n=3 samples used to run in a `for` loop with an `await` inside, so a round cost three
+ * round trips end to end and a five-round loop cost fifteen. These pin the concurrency down
+ * so a future edit cannot quietly serialise it again, and pin the discard/rethrow rules that
+ * had to survive the change.
+ */
+describe('grading issues its samples concurrently', () => {
+  const RUBRIC = rubricById('ml-systems.design.v1')!;
+  const TRANSCRIPT =
+    'I would shard checkpoint writes across replicas because a node fails every 90 minutes.';
+
+  function validSample(): unknown {
+    return {
+      dimensions: RUBRIC.dimensions.map((d) => ({
+        dimension: d.id,
+        level: 3,
+        evidenceQuote: 'I would shard checkpoint writes across replicas',
+      })),
+    };
+  }
+
+  it('starts every sample before any of them resolves', async () => {
+    let inFlight = 0;
+    let peak = 0;
+    const release: (() => void)[] = [];
+
+    const grading = gradeRound(RUBRIC, TRANSCRIPT, {
+      async sample() {
+        inFlight += 1;
+        peak = Math.max(peak, inFlight);
+        await new Promise<void>((resolve) => release.push(resolve));
+        inFlight -= 1;
+        return validSample();
+      },
+    });
+
+    // Yield until all three have registered, then let them finish.
+    await vi.waitFor(() => expect(release).toHaveLength(3));
+    for (const resolve of release) resolve();
+    await grading;
+
+    expect(peak).toBe(3);
+  });
+
+  it('still discards a sample that violates the contract and grades on the survivors', async () => {
+    let call = 0;
+    const grade = await gradeRound(RUBRIC, TRANSCRIPT, {
+      async sample() {
+        call += 1;
+        // The second sample quotes something the candidate never said.
+        return call === 2
+          ? {
+              dimensions: RUBRIC.dimensions.map((d) => ({
+                dimension: d.id,
+                level: 5,
+                evidenceQuote: 'a sentence that is nowhere in the transcript',
+              })),
+            }
+          : validSample();
+      },
+    });
+    expect(grade.samplesCollected).toBe(2);
+  });
+
+  it('propagates a non-contract failure rather than grading on what survived it', async () => {
+    await expect(
+      gradeRound(RUBRIC, TRANSCRIPT, {
+        async sample(_prompt, _temperature, index) {
+          if (index === 2) throw new Error('upstream 503');
+          return validSample();
+        },
+      }),
+    ).rejects.toThrow('upstream 503');
+  });
+
+  it('reports the same failure regardless of which sample loses the race', async () => {
+    const grading = gradeRound(RUBRIC, TRANSCRIPT, {
+      async sample(_prompt, _temperature, index) {
+        // Sample 3 fails first in wall-clock terms; sample 2's failure must still be the
+        // one reported, because results are walked in sample order.
+        if (index === 3) throw new Error('third');
+        if (index === 2) {
+          await new Promise((resolve) => setTimeout(resolve, 10));
+          throw new Error('second');
+        }
+        return validSample();
+      },
+    });
+    await expect(grading).rejects.toThrow('second');
+  });
+});
+
+/**
+ * Both of these were found by running a real five-round loop against gpt-4o: the debrief
+ * returned 500 `internal_error` because every sample of two rounds was discarded. Neither
+ * rejection was a bad grade -- both were the contract refusing evidence the candidate really
+ * had said. A sample discarded for a false reason costs money and silently narrows the
+ * interval, which is the exact failure the levelValue preprocessor was written to stop.
+ */
+describe('the contract does not reject evidence the candidate actually gave', () => {
+  const RUBRIC = rubricById('ml-systems.design.v1')!;
+  const dimensionId = RUBRIC.dimensions[0]!.id;
+
+  function sampleWith(quote: string): unknown {
+    return { dimensions: [{ dimension: dimensionId, level: 3, evidenceQuote: quote }] };
+  }
+
+  it('accepts an excerpt the grader ended early with a full stop', () => {
+    // The answer runs on with a comma; the grader cut its excerpt and terminated it.
+    const transcript = 'A: I sharded the writes across replicas, and drained them to S3.';
+    const parsed = parseSample(
+      sampleWith('I sharded the writes across replicas.'),
+      RUBRIC,
+      transcript,
+    );
+    expect(parsed.dimensions[0]?.evidenceQuote).toBe('I sharded the writes across replicas.');
+  });
+
+  it('accepts an excerpt wrapped in ellipses or quotation marks', () => {
+    const transcript = 'A: I sharded the writes across replicas, and drained them to S3.';
+    for (const quote of [
+      '...sharded the writes across replicas...',
+      '"I sharded the writes across replicas"',
+      '  I sharded the writes across replicas;  ',
+    ]) {
+      expect(() => parseSample(sampleWith(quote), RUBRIC, transcript)).not.toThrow();
+    }
+  });
+
+  it('accepts a long but genuine quote, up to the hard ceiling', () => {
+    const body = 'I sharded the writes across replicas and drained them to object storage. '
+      .repeat(9)
+      .trim();
+    expect(body.length).toBeGreaterThan(600); // what the old cap rejected outright
+    expect(body.length).toBeLessThanOrEqual(MAX_EVIDENCE_QUOTE_CHARS);
+    expect(() => parseSample(sampleWith(body), RUBRIC, `A: ${body}`)).not.toThrow();
+  });
+
+  it('still refuses a quote past the ceiling, so the whole answer is not "evidence"', () => {
+    const huge = 'x'.repeat(MAX_EVIDENCE_QUOTE_CHARS + 1);
+    expect(() => parseSample(sampleWith(huge), RUBRIC, `A: ${huge}`)).toThrow(GraderContractError);
+  });
+
+  it('asks for a shorter quote than it will accept, so an overshoot is not fatal', () => {
+    expect(REQUESTED_EVIDENCE_QUOTE_CHARS).toBeLessThan(MAX_EVIDENCE_QUOTE_CHARS);
+    expect(buildGraderPrompt(RUBRIC, 'A: hi')).toContain(String(REQUESTED_EVIDENCE_QUOTE_CHARS));
+  });
+
+  it('still rejects a paraphrase -- edge trimming forgives punctuation, not wording', () => {
+    const transcript = 'A: I sharded the writes across replicas, and drained them to S3.';
+    expect(() =>
+      parseSample(sampleWith('The candidate distributed the writes.'), RUBRIC, transcript),
+    ).toThrow(GraderContractError);
+  });
+
+  it('still rejects a rubric anchor passed off as a quote', () => {
+    const anchor = RUBRIC.dimensions[0]!.anchors[0]!.anchor;
+    expect(() =>
+      parseSample(sampleWith(anchor), RUBRIC, 'A: I sharded the writes across replicas.'),
+    ).toThrow(GraderContractError);
+  });
+
+  it('rejects a quote that is nothing but punctuation', () => {
+    expect(() => parseSample(sampleWith('"..."'), RUBRIC, 'A: I sharded the writes.')).toThrow(
+      GraderContractError,
+    );
   });
 });

@@ -31,6 +31,16 @@ interface DebriefAttribute {
   readonly lowInformation: boolean;
 }
 
+interface DebriefPresence {
+  readonly sampleCount: number;
+  readonly detectedCount: number;
+  readonly wellFramedRatio: number;
+  readonly driftEvents: number;
+  readonly longestWellFramedMs: number;
+  readonly roundCount: number;
+  readonly notes: readonly string[];
+}
+
 interface DebriefPacket {
   readonly overallDisplay: string;
   readonly overall: { median: number; intervalLow: number; intervalHigh: number };
@@ -39,10 +49,33 @@ interface DebriefPacket {
   readonly practiceFocus: readonly DebriefAttribute[];
   readonly methodNote: string;
   readonly calibrationLink: string;
+  /** Null whenever the session was not recorded on camera; the section is then absent. */
+  readonly presence: DebriefPresence | null;
 }
 
 async function readJson<T>(res: Response): Promise<T> {
   return (await res.json()) as T;
+}
+
+/**
+ * The question is set at display weight, but display SIZE only suits a short question.
+ * Generated questions run long -- one measured 270 characters, which at --text-display-s
+ * filled the viewport with seven lines of serif and pushed the answer box below the fold.
+ *
+ * Length picks the rung. Nothing else changes: same face, same colour, same measure.
+ */
+function questionSizeClass(question: string): string {
+  const n = question.trim().length;
+  if (n <= 80) return 'text-[length:var(--text-display-s)]';
+  if (n <= 160) return 'text-[length:var(--text-display-xs)]';
+  return 'text-[length:var(--text-display-2xs)]';
+}
+
+/** "4 min 20 s" from a millisecond duration; whole seconds under a minute. */
+function duration(ms: number): string {
+  const seconds = Math.round(ms / 1000);
+  if (seconds < 60) return `${seconds} s`;
+  return `${Math.floor(seconds / 60)} min ${seconds % 60} s`;
 }
 
 /** Position of a 1-5 score along the gauge track, clamped so 1.0 still shows a mark. */
@@ -198,11 +231,51 @@ export default function SessionPage({ params }: { params: Promise<{ id: string }
             <h2 id="question-heading" className="label text-gold-600">
               Question
             </h2>
-            <p className="display mt-5 max-w-[26ch] text-balance text-[length:var(--text-display-s)] text-room-ink sm:max-w-[34ch]">
+            <p
+              className={`display mt-5 max-w-[46ch] text-balance leading-[1.25] text-room-ink ${questionSizeClass(view.question ?? '')}`}
+            >
               {view.question}
             </p>
             <QuestionAudio sessionId={id} questionText={view.question ?? ''} />
           </section>
+
+          {view.videoEligible ? (
+            <div className="border-t border-room-rule px-5 py-4 sm:px-8">
+              {/* Keyed on the round so each round is measured separately -- blending two
+                  rounds' samples would report a framing habit that never happened. */}
+              <CameraPresence
+                roundKey={`${view.sessionId}:${view.currentRoundPosition}`}
+                onSummary={(summary) => {
+                  // Nine numbers, computed in the browser. Fire-and-forget: framing advice
+                  // must never be able to block or fail an interview answer.
+                  if (view.currentRoundId === null) return;
+                  void fetch(`/api/sessions/${id}/presence`, {
+                    method: 'POST',
+                    headers: {
+                      'content-type': 'application/json',
+                      'idempotency-key': crypto.randomUUID(),
+                    },
+                    body: JSON.stringify({ roundId: view.currentRoundId, ...summary }),
+                  }).catch(() => {});
+                }}
+              />
+            </div>
+          ) : (
+            /* Eligibility is decided server-side from region, age band and the stored
+               opt-in. Rendering nothing at all -- which is what this did -- left a video
+               product with no camera and no explanation for its absence. */
+            <div className="border-t border-room-rule px-5 py-4 sm:px-8">
+              <p className="label text-room-ink-2">Camera</p>
+              <p className="mt-1 max-w-[60ch] text-sm text-room-ink-2">
+                Camera framing is off for this account. It needs your region and age band on
+                file, and the camera setting switched on.{' '}
+                <a href="/settings" className="underline underline-offset-2 hover:text-room-ink">
+                  Open settings
+                </a>
+                .
+              </p>
+            </div>
+          )}
 
           <div className="border-t border-room-rule px-5 py-6 sm:px-8">
             <label htmlFor="answer" className="label block text-room-ink-2">
@@ -234,29 +307,6 @@ export default function SessionPage({ params }: { params: Promise<{ id: string }
               </button>
             </div>
           </div>
-
-          {view.videoEligible ? (
-            <div className="border-t border-room-rule px-5 py-4 sm:px-8">
-              {/* Keyed on the round so each round is measured separately -- blending two
-                  rounds' samples would report a framing habit that never happened. */}
-              <CameraPresence
-                roundKey={`${view.sessionId}:${view.currentRoundPosition}`}
-                onSummary={(summary) => {
-                  // Nine numbers, computed in the browser. Fire-and-forget: framing advice
-                  // must never be able to block or fail an interview answer.
-                  if (view.currentRoundId === null) return;
-                  void fetch(`/api/sessions/${id}/presence`, {
-                    method: 'POST',
-                    headers: {
-                      'content-type': 'application/json',
-                      'idempotency-key': crypto.randomUUID(),
-                    },
-                    body: JSON.stringify({ roundId: view.currentRoundId, ...summary }),
-                  }).catch(() => {});
-                }}
-              />
-            </div>
-          ) : null}
         </div>
       ) : null}
 
@@ -264,7 +314,14 @@ export default function SessionPage({ params }: { params: Promise<{ id: string }
         <section className="mx-auto max-w-xl py-10 text-center">
           <p className="label text-plum-500">Loop complete</p>
           <h2 className="display mt-3 text-plum-900 text-[length:var(--text-display-s)]">
-            {view.answeredTurnCount} rounds answered
+            {/*
+              Rounds and answers are not the same number. This read `answeredTurnCount`
+              rounds, which was only ever right while the interviewer accepted every answer
+              on the first try -- once it actually asks follow-ups, a five-round loop reports
+              "9 rounds answered". Say both, and say which is which.
+            */}
+            {view.roundCount} {view.roundCount === 1 ? 'round' : 'rounds'}, answered in{' '}
+            {view.answeredTurnCount} {view.answeredTurnCount === 1 ? 'turn' : 'turns'}
           </h2>
           <p className="mt-4 text-neutral-600">
             Grading runs three independent samples per dimension, so this takes a moment.
@@ -354,6 +411,78 @@ export default function SessionPage({ params }: { params: Promise<{ id: string }
               No evidence was collected for {debrief.gaps.join(', ')} — reported as a gap rather
               than scored as zero.
             </p>
+          ) : null}
+
+          {/*
+            Camera framing. Deliberately outside "Every dimension" and carrying no score: it is
+            not graded, it does not move the overall number, and presenting it beside the
+            rubric scores would imply it did. The wording stays on the camera and the position
+            in frame, never on the candidate.
+          */}
+          {debrief.presence !== null ? (
+            <section aria-labelledby="framing-heading" className="mt-12">
+              <h3
+                id="framing-heading"
+                className="display border-b border-rule pb-2 text-xl text-plum-900"
+              >
+                Camera framing
+              </h3>
+              <p className="mt-3 max-w-[62ch] text-sm text-neutral-600">
+                Measured on your device across{' '}
+                {debrief.presence.roundCount === 1
+                  ? '1 round'
+                  : `${debrief.presence.roundCount} rounds`}
+                . No video left your machine, and this is not scored — it is setup advice.
+              </p>
+
+              <dl className="mt-5 grid grid-cols-2 gap-4 lg:grid-cols-4">
+                <div className="rounded-xl border border-rule bg-raised p-4">
+                  <dt className="label text-neutral-600">Well framed</dt>
+                  <dd className="display mt-1 text-2xl text-plum-900">
+                    {Math.round(debrief.presence.wellFramedRatio * 100)}%
+                  </dd>
+                </div>
+                <div className="rounded-xl border border-rule bg-raised p-4">
+                  <dt className="label text-neutral-600">Longest steady stretch</dt>
+                  <dd className="display mt-1 text-2xl text-plum-900">
+                    {duration(debrief.presence.longestWellFramedMs)}
+                  </dd>
+                </div>
+                <div className="rounded-xl border border-rule bg-raised p-4">
+                  <dt className="label text-neutral-600">Framing shifts</dt>
+                  <dd className="display mt-1 text-2xl text-plum-900">
+                    {debrief.presence.driftEvents}
+                  </dd>
+                </div>
+                <div className="rounded-xl border border-rule bg-raised p-4">
+                  <dt className="label text-neutral-600">In frame</dt>
+                  <dd className="display mt-1 text-2xl text-plum-900">
+                    {debrief.presence.sampleCount === 0
+                      ? '—'
+                      : `${Math.round(
+                          (debrief.presence.detectedCount / debrief.presence.sampleCount) * 100,
+                        )}%`}
+                  </dd>
+                </div>
+              </dl>
+
+              {debrief.presence.notes.length > 0 ? (
+                <ul className="mt-5 space-y-2">
+                  {debrief.presence.notes.map((note) => (
+                    <li
+                      key={note}
+                      className="border-l-2 border-rule-firm pl-4 text-sm text-neutral-600"
+                    >
+                      {note}
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="mt-5 border-l-2 border-rule-firm pl-4 text-sm text-neutral-600">
+                  Too few samples to say anything useful about your setup.
+                </p>
+              )}
+            </section>
           ) : null}
 
           <p className="mt-10">

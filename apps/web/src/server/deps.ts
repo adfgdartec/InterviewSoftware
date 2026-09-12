@@ -1,7 +1,5 @@
-import { ITEM_BANK, itemsFor, loopTemplateById } from '@loopcraft/core';
+import { itemsFor, loopTemplateById } from '@loopcraft/core';
 import { appClient, ownerClient, provisioningClient, DEV_PLAN_ID } from '@loopcraft/db';
-import { demoGenerator } from './demo.js';
-import { heuristicGraderSampler } from './heuristic-grader.js';
 import { llmGraderSampler } from './llm-grader.js';
 import { llmQuestionGenerator } from './llm-question-generator.js';
 import { PostgresRateLimiter } from './rate-limit.js';
@@ -79,18 +77,21 @@ export async function buildRouteDeps(request?: Request): Promise<RouteDeps> {
     rateLimiter,
     templates: { byId: loopTemplateById },
     items: { itemsFor },
-    // A real model writes the question against the round's own rubric; the deterministic
-    // demo generator is the fallback when no provider is configured. `selectQuestion` still
-    // validates and still falls back to the curated catalog when generation is rejected.
-    generator: llmQuestionGenerator() ?? demoGenerator(ITEM_BANK),
+    // A real model writes the question against the round's own rubric, on whichever tier is
+    // usable. `selectQuestion` still validates, and still falls back to the curated catalog
+    // when generation is rejected or no provider is usable -- so a curated question, not an
+    // invented one, is what a candidate sees in that case.
+    generator: llmQuestionGenerator(),
     sql,
     turnsPerRound: 1,
     costCeilingCents: 500,
     generationTimeoutMs: 8_000,
-    // Real grading. heuristicGraderSampler scored on string length and whether the answer
-    // contained a digit, which is why every debrief read the same number down the page. It
-    // stays as the last resort so an unconfigured environment degrades rather than 503s.
-    graderSampler: llmGraderSampler() ?? heuristicGraderSampler(),
+    // Real grading, on whichever tier is usable -- OpenAI on Workers, local Ollama on a
+    // machine with no key. heuristicGraderSampler is deliberately NOT wired in behind it:
+    // it scored on string length and whether the answer contained a digit, so substituting
+    // it would answer an unconfigured environment with invented numbers that look like
+    // grades. An environment that cannot grade now says so (503 `grader_unavailable`).
+    graderSampler: llmGraderSampler(),
     // One connection, opened and closed around the callback. Only the Stripe webhook uses
     // it; every user-facing route goes through asUser and RLS.
     owner: async (fn) => {

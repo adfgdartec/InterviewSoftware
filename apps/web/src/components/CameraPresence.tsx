@@ -17,6 +17,36 @@ import {
  */
 const SAMPLE_INTERVAL_MS = 500;
 
+/**
+ * Whether the camera starts itself. It used to be off until the candidate found a button
+ * below the submit control, which meant the framing coaching existed but effectively never
+ * ran -- a rehearsal for a video interview that was not, itself, a video interview.
+ *
+ * On by default, and the choice is remembered: turning it off keeps it off for the next
+ * round and the next session, because someone who declined once should not have to decline
+ * every round. Stored per browser, never sent anywhere -- consistent with the rest of this
+ * component, where no frame ever leaves the device.
+ */
+const PREFERENCE_KEY = 'lc.camera.enabled';
+
+function preferredOn(): boolean {
+  try {
+    return window.localStorage.getItem(PREFERENCE_KEY) !== 'off';
+  } catch {
+    // Private windows and blocked site-data both throw here. Default to on rather than
+    // letting a storage failure silently disable the feature.
+    return true;
+  }
+}
+
+function rememberPreference(on: boolean): void {
+  try {
+    window.localStorage.setItem(PREFERENCE_KEY, on ? 'on' : 'off');
+  } catch {
+    // Nothing to do: the preference simply does not persist for this viewer.
+  }
+}
+
 type Status = 'idle' | 'starting' | 'monitoring' | 'stopped' | 'error';
 
 export interface CameraPresenceProps {
@@ -64,9 +94,28 @@ export function CameraPresence({ roundKey, onSummary }: CameraPresenceProps): Re
     onSummary?.(result);
   }, [onSummary, stopEverything]);
 
+  /** The candidate turning the camera off. Distinct from `finish`, which a round change
+   *  also triggers: only an explicit "off" should stop it starting again next round. */
+  const turnOff = useCallback((): void => {
+    rememberPreference(false);
+    finish();
+  }, [finish]);
+
   // The camera must not outlive this component under any exit path, including a navigation
   // that unmounts without a click.
   useEffect(() => stopEverything, [stopEverything]);
+
+  // Start without being asked, unless this browser has been told not to. Guarded by a ref so
+  // React's development double-invoke cannot open two streams, and so a re-render during
+  // `starting` never kicks off a second getUserMedia.
+  const autoStartedRef = useRef(false);
+  useEffect(() => {
+    if (autoStartedRef.current) return;
+    autoStartedRef.current = true;
+    if (preferredOn()) void start();
+    // `start` is stable for this purpose: it only writes state and refs.
+     
+  }, []);
 
   // Held in a ref so the round-change effect below can depend on `roundKey` ALONE. Taking
   // `finish` as a dependency would re-run it whenever the parent re-created `onSummary`,
@@ -204,22 +253,28 @@ export function CameraPresence({ roundKey, onSummary }: CameraPresenceProps): Re
   // point of the component, so it is NOT tucked behind a disclosure.
   if (status === 'idle' || status === 'error' || status === 'starting') {
     return (
-      <div className="rounded-lg border border-room-rule bg-room-wall p-4">
-        <p className="label text-room-ink-2">Camera</p>
-        <p className="mt-2 max-w-[60ch] text-xs text-room-ink-2">
-          Optional. Shows you your own camera while you answer, and watches only where your
-          head sits in the frame. It all happens on this device — no image or video is ever
-          uploaded. It produces framing advice, nothing about you.
-        </p>
-        {status === 'starting' ? (
-          <p className="mt-3 text-sm text-room-ink-2">Starting the camera…</p>
-        ) : (
-          <button type="button" onClick={() => void start()} className="btn btn-quiet mt-3">
-            Turn my camera on
-          </button>
-        )}
+      <div className="rounded-xl border border-room-rule bg-room-wall p-5">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <div className="min-w-0">
+            <p className="label text-room-ink-2">Camera</p>
+            <p className="mt-1 text-base text-room-ink">
+              {status === 'starting'
+                ? 'Starting your camera…'
+                : 'Your camera is off. Rehearsing on camera is the point of a video round.'}
+            </p>
+            <p className="mt-1 max-w-[58ch] text-sm text-room-ink-2">
+              Nothing is uploaded. The video never leaves this device — only nine numbers
+              about where your head sat in the frame are saved with the round.
+            </p>
+          </div>
+          {status !== 'starting' ? (
+            <button type="button" onClick={() => void start()} className="btn btn-primary shrink-0">
+              Turn my camera on
+            </button>
+          ) : null}
+        </div>
         {error !== null ? (
-          <p role="alert" className="mt-3 text-sm font-medium text-danger">
+          <p role="alert" className="mt-4 border-l-2 border-danger pl-3 text-sm font-medium text-danger">
             {error}
           </p>
         ) : null}
@@ -228,61 +283,97 @@ export function CameraPresence({ roundKey, onSummary }: CameraPresenceProps): Re
     );
   }
 
+  const checks: readonly { label: string; ok: boolean }[] =
+    live === null
+      ? []
+      : [
+          { label: 'Centred', ok: live.centered },
+          { label: 'Distance', ok: live.distanceOk },
+          { label: 'Eye line', ok: live.eyeLineOk },
+        ];
+
   return (
-    <div className="rounded-lg border border-room-rule bg-room-wall p-4">
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-start">
-        {/* The self-view. A real interview puts your own face on screen, and seeing it is
-            what lets someone actually act on the framing advice beside it. */}
-        <div className="relative w-full shrink-0 overflow-hidden rounded-lg border border-room-rule bg-room-floor sm:w-64">
+    <div className="overflow-hidden rounded-xl border border-room-rule bg-room-wall">
+      <div className="grid gap-0 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
+        {/* The self-view, at a size worth looking at. A real interview puts your own face on
+            screen; seeing it is what lets anyone act on the advice beside it. */}
+        <div className="relative aspect-[4/3] w-full bg-room-floor">
           <video
             ref={videoRef}
             muted
             playsInline
-            // Mirrored, which is what every video call does: an unmirrored self-view makes
-            // people correct their position the wrong way. Display only -- the detector reads
-            // the element's real pixels, so the geometry is unaffected. (framingVerdict never
-            // says "left" or "right", so nothing it reports is flipped by this either.)
-            className={status === 'monitoring' ? 'block w-full bg-room-floor' : 'hidden'}
-            // An inline transform rather than a utility class: the negative-scale utility did
-            // not survive into the build, and a self-view that is not mirrored makes people
-            // correct their position the wrong way.
+            // Mirrored, as every video call is: an unmirrored self-view makes people correct
+            // their position the wrong way. Display only -- the detector reads the element's
+            // real pixels, so the geometry is unaffected.
+            className="h-full w-full object-cover"
             style={{ transform: 'scaleX(-1)' }}
           />
-          {status === 'monitoring' ? (
-            <span
-              aria-hidden="true"
-              className={`absolute left-2 top-2 h-2.5 w-2.5 rounded-full ${
-                live === null ? 'bg-danger' : wellFramed ? 'bg-success' : 'bg-gold-600'
-              }`}
-            />
-          ) : null}
-        </div>
-
-        <div className="min-w-0 flex-1">
-          <p className="label text-room-ink-2">Camera</p>
-          {/* Live, so the feedback is useful DURING the round rather than only after it.
-              aria-live so it is announced rather than only seen. */}
-          <p
-            aria-live="polite"
-            className={`mt-1 text-sm font-medium ${
-              live === null ? 'text-room-ink-2' : wellFramed ? 'text-success' : 'text-gold-600'
+          <span
+            className={`absolute left-3 top-3 inline-flex items-center gap-2 rounded-full px-3 py-1 text-xs font-medium ${
+              live === null
+                ? 'bg-room-floor/85 text-room-ink-2'
+                : wellFramed
+                  ? 'bg-success/15 text-success'
+                  : 'bg-gold-600/15 text-gold-600'
             }`}
           >
-            {live === null
-              ? 'No face in frame'
-              : wellFramed
-                ? 'Framing looks good'
-                : (live.messages[0] ?? 'Adjust your framing')}
-          </p>
-          <p className="mt-2 text-xs text-room-ink-2">
-            Nothing is uploaded. This runs entirely on your device.
-          </p>
-          <button type="button" onClick={finish} className="btn btn-quiet mt-3">
-            Turn camera off
-          </button>
+            <span
+              aria-hidden="true"
+              className={`h-2 w-2 rounded-full ${
+                live === null ? 'bg-room-ink-2' : wellFramed ? 'bg-success' : 'bg-gold-600'
+              }`}
+            />
+            {live === null ? 'Looking for you' : wellFramed ? 'Well framed' : 'Adjust'}
+          </span>
+        </div>
+
+        <div className="flex min-w-0 flex-col justify-between gap-5 border-t border-room-rule p-5 sm:border-l sm:border-t-0">
+          <div>
+            <p className="label text-room-ink-2">Framing</p>
+            {/* The one instruction worth acting on right now, at a size you can read from
+                a normal sitting distance. aria-live so it is announced, not only seen. */}
+            <p
+              aria-live="polite"
+              className={`mt-2 text-lg leading-snug ${
+                live === null ? 'text-room-ink-2' : wellFramed ? 'text-success' : 'text-room-ink'
+              }`}
+            >
+              {live === null
+                ? 'No face in frame yet.'
+                : wellFramed
+                  ? 'Holding steady. Nothing to fix.'
+                  : (live.messages[0] ?? 'Adjust your framing.')}
+            </p>
+
+            {checks.length > 0 ? (
+              <ul className="mt-4 space-y-1.5">
+                {checks.map((c) => (
+                  <li key={c.label} className="flex items-center justify-between gap-4 text-sm">
+                    <span className="text-room-ink-2">{c.label}</span>
+                    <span className={c.ok ? 'text-success' : 'text-gold-600'}>
+                      {c.ok ? 'ok' : 'off'}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            ) : null}
+          </div>
+
+          <div>
+            <p className="text-sm text-room-ink-2">
+              Nothing is uploaded. This runs entirely on your device.
+            </p>
+            <button type="button" onClick={turnOff} className="btn btn-quiet mt-3">
+              Turn camera off
+            </button>
+          </div>
         </div>
       </div>
-      {summary !== null ? <RoundSummary summary={summary} /> : null}
+      {summary !== null ? (
+        <div className="border-t border-room-rule px-5 pb-5">
+          <RoundSummary summary={summary} />
+        </div>
+      ) : null}
     </div>
   );
 }

@@ -199,10 +199,16 @@ describe('the margin gate refuses to certify unpriced drivers (guardrail 8)', ()
   };
 
   it('reports rates_unset against the committed rates file, and names the gaps', () => {
+    // The committed table is now partly priced from the vendors' own pages, so the gate has
+    // fewer gaps to name -- but a partial table must still not certify a margin, and the two
+    // it names are the two rates-sources.md documents as unobtainable in the needed units.
     const report = evaluateMargins(PLANS, RATES);
     expect(report.verdict).toBe('rates_unset');
     expect(report.message).toMatch(/still null/);
-    expect(report.message).toMatch(/asrPerMinute/);
+    expect(report.message).toMatch(/ttsPerThousandCharacters/);
+    expect(report.message).toMatch(/codeExecutionPerCpuSecond/);
+    // A rate that IS priced must not be reported as a gap.
+    expect(report.message).not.toMatch(/asrPerMinute/);
     expect(report.plans).toEqual([]);
   });
 

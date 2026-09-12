@@ -9,7 +9,8 @@
   "scripts": {
     "build": "turbo run build",
     "dev": "turbo run dev",
-    "lint": "turbo run lint",
+    "_lint_comment": "`eslint .` from the root, NOT `turbo run lint`. Turbo only ran the lint task in the two packages that declare one, so scripts/ was never linted and a no-undef error there failed CI while `pnpm lint` passed locally. CI runs `pnpm exec eslint .`; this runs the same thing.",
+    "lint": "eslint .",
     "typecheck": "turbo run typecheck",
     "test": "turbo run test --concurrency=1",
     "test:rls": "pnpm --filter @loopcraft/db test:rls",

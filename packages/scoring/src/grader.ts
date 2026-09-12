@@ -27,11 +27,29 @@ const levelValue = z.preprocess(
   z.number().int().min(1).max(5),
 );
 
+/**
+ * How long an evidence quote may be.
+ *
+ * The cap exists so the grader cannot pass the candidate's entire answer off as "evidence"
+ * for every dimension, which would make the quote useless for auditing a score. It was 600
+ * and the prompt never mentioned it, so a grader quoting a long but entirely legitimate span
+ * failed the schema -- and because a schema failure discards the WHOLE sample, one long quote
+ * threw away all four dimensions of that sample. Three such samples is a 500 on the debrief,
+ * which is exactly what a real five-round loop produced.
+ *
+ * The fix is on both sides: the prompt now states the limit (see buildGraderPrompt) so the
+ * grader complies, and the ceiling here sits above it so a slight overshoot is not fatal.
+ */
+export const MAX_EVIDENCE_QUOTE_CHARS = 1_000;
+
+/** What the prompt asks for, deliberately below the hard ceiling the schema enforces. */
+export const REQUESTED_EVIDENCE_QUOTE_CHARS = 400;
+
 /** One dimension's verdict from one sample. The quote is what makes the score auditable. */
 export const dimensionVerdict = z.object({
   dimension: z.string().min(1),
   level: levelValue,
-  evidenceQuote: z.string().min(1).max(600),
+  evidenceQuote: z.string().min(1).max(MAX_EVIDENCE_QUOTE_CHARS),
 });
 
 export const graderResponse = z.object({
@@ -72,6 +90,14 @@ export function buildGraderPrompt(rubric: Rubric, transcript: string): string {
     '  did, and do NOT restate the anchor text above -- those are the levels, not the evidence.',
     '  If a dimension has no supporting words in the transcript, quote the closest thing the',
     '  candidate actually said and score the low level it evidences.',
+    // A real debrief printed the same sentence under five different dimensions, which makes
+    // the evidence look decorative rather than diagnostic -- the whole point of the quote is
+    // that it shows WHY this dimension scored what it did.
+    '- Use a DIFFERENT span for each dimension. If two dimensions would quote the same words,',
+    '  the second one is not evidenced by them: quote what actually bears on that dimension,',
+    '  or quote the nearest thing and score it low.',
+    `- Keep evidenceQuote under ${REQUESTED_EVIDENCE_QUOTE_CHARS} characters -- one or two`,
+    '  sentences. Quote the span that shows the level, not the whole answer.',
     '- Do not describe or infer the candidate\'s internal state. If you cannot quote evidence',
     '  for a level, score the level you can evidence.',
     '- Do not comment on hiring outcomes, suitability, or the likelihood of an offer.',
@@ -119,6 +145,23 @@ function normalizeForQuoteCheck(text: string): string {
 }
 
 /**
+ * Trims the punctuation a model leaves on the EDGES of an excerpt.
+ *
+ * Observed in a real run: the candidate wrote "...into a parallel one, and write
+ * asynchronously..." and the grader quoted "...into a parallel one." -- ending its excerpt
+ * mid-sentence and terminating it with a full stop. That is the same span, re-punctuated at
+ * the cut, and failing it as "not a verbatim quote" is a false rejection that discarded the
+ * whole sample.
+ *
+ * Only the edges are touched, and only on the quote, never the transcript: a paraphrase is
+ * still a paraphrase, and internal wording still has to match exactly. What this forgives is
+ * how the model ended its excerpt, not what the excerpt says.
+ */
+function trimQuoteEdges(text: string): string {
+  return text.replace(/^["'\u2026.,;:\s-]+/, '').replace(/["'\u2026.,;:\s-]+$/, '');
+}
+
+/**
  * The candidate's own words, with the interviewer's stripped out. `transcriptForRound`
  * formats turns as "Q: ...\nA: ...", and a quote lifted from a Q line would credit the
  * candidate with the interviewer's phrasing.
@@ -162,7 +205,13 @@ export function parseSample(raw: unknown, rubric: Rubric, transcript?: string): 
     }
     if (transcript !== undefined) {
       const haystack = normalizeForQuoteCheck(answerText(transcript));
-      if (!haystack.includes(normalizeForQuoteCheck(verdict.evidenceQuote))) {
+      const needle = trimQuoteEdges(normalizeForQuoteCheck(verdict.evidenceQuote));
+      if (needle.length === 0) {
+        throw new GraderContractError(
+          `Grader evidence for "${verdict.dimension}" is punctuation, not a quote.`,
+        );
+      }
+      if (!haystack.includes(needle)) {
         throw new GraderContractError(
           `Grader evidence for "${verdict.dimension}" is not a verbatim quote from the answer.`,
         );
@@ -199,12 +248,28 @@ export async function gradeRound(
   }
   const prompt = buildGraderPrompt(rubric, transcript);
 
+  // The samples are INDEPENDENT by construction (see the sampler's own notes on why they
+  // must not be coalesced), so running them one after another only ever added latency: a
+  // five-round loop is fifteen grading calls, and serially that was minutes of a candidate
+  // watching a spinner. Issued together, a round costs one call's wall time, not three.
+  const settled = await Promise.allSettled(
+    Array.from({ length: sampleCount }, (_, i) =>
+      sampler.sample(prompt, GRADER_TEMPERATURE, i + 1),
+    ),
+  );
+
   const collected: GraderResponse[] = [];
-  for (let i = 0; i < sampleCount; i += 1) {
+  for (const outcome of settled) {
+    if (outcome.status === 'rejected') {
+      // A contract violation is discarded, as it always was. Anything else -- a transport
+      // failure, a missing credential -- is not the grader misunderstanding the task, and
+      // must not be laundered into a thinner-but-valid grade. Results are walked in sample
+      // order so which error surfaces does not depend on which call happened to lose a race.
+      if (!(outcome.reason instanceof GraderContractError)) throw outcome.reason;
+      continue;
+    }
     try {
-      collected.push(
-        parseSample(await sampler.sample(prompt, GRADER_TEMPERATURE, i + 1), rubric, transcript),
-      );
+      collected.push(parseSample(outcome.value, rubric, transcript));
     } catch (error) {
       if (!(error instanceof GraderContractError)) throw error;
     }

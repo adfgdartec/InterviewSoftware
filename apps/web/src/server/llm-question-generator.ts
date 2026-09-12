@@ -1,12 +1,7 @@
 import { LOOP_TEMPLATES, rubricById, trackById, type Rubric } from '@loopcraft/core';
-import {
-  lookup,
-  ollamaReachable,
-  openaiChat,
-  openaiConfigured,
-  chat as ollamaChat,
-} from '@loopcraft/providers';
+import { openaiChat, chat as ollamaChat } from '@loopcraft/providers';
 import type { QuestionGenerator, QuestionRequest } from './question-generation.js';
+import { resolveModel, type ProviderProbes } from './model-tier.js';
 
 /**
  * Real question generation, against the rubric the round will actually be graded on.
@@ -43,6 +38,12 @@ function buildPrompt(request: QuestionRequest, rubric: Rubric, seniority: string
     '',
     'Requirements:',
     '- One question. No preamble, no numbering, no quotation marks around it.',
+    // Generated questions drifted into 250-character run-ons that bolted three asks together
+    // with "including..." and "and what...", which is not how anyone interviews out loud and
+    // is unreadable at display size. One ask, short enough to be said in a breath.
+    '- Under 30 words, and ONE ask. Do not chain sub-questions with "including", "as well as",',
+    '  or "and what". If the rubric needs more, ask the sharpest part and let the follow-up',
+    '  come later -- the interviewer asks follow-ups of its own.',
     '- Concrete and specific enough that a vague answer is obviously vague.',
     '- Answerable out loud in a few minutes. Do not ask for code to be written out.',
     '- Ask about the candidate\'s own work, reasoning or choices.',
@@ -93,24 +94,20 @@ export function rubricIdFor(trackId: string, roundType: string): string | undefi
   return undefined;
 }
 
-export interface LlmQuestionGeneratorOptions {
+export interface LlmQuestionGeneratorOptions extends ProviderProbes {
   /** Defaults to the catalog-derived lookup above; overridden in tests. */
   readonly rubricFor?: (request: QuestionRequest) => string | undefined;
-  readonly ollamaAvailable?: () => Promise<boolean>;
 }
 
 /**
- * Returns a generator, or null when no provider is configured -- in which case
- * `selectQuestion` uses the catalog and records `no_generator_configured`, which is the
- * honest state rather than a fabricated question.
+ * Returns a generator. Which provider serves is resolved per call, not at wiring time, so a
+ * key added or a local model started mid-process is picked up; when none is usable the
+ * generator throws and `selectQuestion` falls back to the catalog and records
+ * `no_generator_configured`, which is the honest state rather than a fabricated question.
  */
 export function llmQuestionGenerator(
   options: LlmQuestionGeneratorOptions = {},
-): QuestionGenerator | null {
-  const entry = lookup(QUESTION_GENERATION);
-  const probeOllama = options.ollamaAvailable ?? ollamaReachable;
-  if (!openaiConfigured() && entry.primary.provider !== 'ollama') return null;
-
+): QuestionGenerator {
   return {
     async generate(request: QuestionRequest, signal: AbortSignal): Promise<string> {
       const rubricFor =
@@ -143,28 +140,20 @@ export function llmQuestionGenerator(
         });
       });
 
-      const useOllama = entry.primary.provider === 'ollama' && (await probeOllama());
-      const call = useOllama
-        ? ollamaChat(
-            {
-              model: entry.primary.model,
-              messages,
-              temperature: 0.8,
-              timeoutMs: entry.primary.timeoutMs,
-            },
-            false,
-          )
-        : openaiChat(
-            {
-              model: entry.fallbacks[0]?.model ?? 'gpt-4o-mini',
-              messages,
-              // Warm enough that a track does not ask one question forever. Not cacheable,
-              // for the same reason: a cached question is the static bank again.
-              temperature: 0.8,
-              timeoutMs: entry.fallbacks[0]?.timeoutMs ?? 20_000,
-            },
-            false,
-          );
+      const model = await resolveModel(QUESTION_GENERATION, options);
+      if (model === null) throw new Error('No question-generation provider is usable.');
+
+      // Warm enough that a track does not ask one question forever. Not cacheable, for the
+      // same reason: a cached question is the static bank again.
+      const call = (model.provider === 'ollama' ? ollamaChat : openaiChat)(
+        {
+          model: model.model,
+          messages,
+          temperature: 0.8,
+          timeoutMs: model.timeoutMs,
+        },
+        false,
+      );
 
       return stripWrapping(await Promise.race([call, aborted]));
     },

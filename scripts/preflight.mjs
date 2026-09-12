@@ -12,7 +12,12 @@
  * Exit code 1 if anything REQUIRED for the checked target is missing, so CI can gate on it.
  */
 
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import { dirname, join } from 'node:path';
+
+const REPO_ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
+const repoFile = (relative) => join(REPO_ROOT, relative);
 
 const args = process.argv.slice(2);
 const envFileIndex = args.indexOf('--env-file');
@@ -66,13 +71,105 @@ const CHECKS = [
   },
 ];
 
-/** Configuration that is not an env var but will still stop a launch. */
+/**
+ * Configuration that is not an env var but will still stop a launch.
+ *
+ * These were a hardcoded list of TODOs printed unconditionally, which meant the report went
+ * stale the moment any of them was actually done -- it was still reporting "No document
+ * exists" for the terms and privacy notice two commits after both shipped. Each one now reads
+ * the repository and reports what is true, so a finished item disappears from the list on its
+ * own and an unfinished one cannot be forgotten.
+ *
+ * Each returns { done, detail }. `null` from a check means "cannot tell from here" -- a live
+ * database or a Cloudflare account is needed -- which is reported as its own state rather
+ * than guessed either way.
+ */
+
+/** Placeholders brand.ts ships with. Matching one means nobody has set the real value yet. */
+const BRAND_PLACEHOLDERS = ['InterviewSoftware', 'support@interviewsoftware.ai'];
+
+function checkVendorRates() {
+  try {
+    const rates = JSON.parse(readFileSync(repoFile('packages/core/src/rates.json'), 'utf8'));
+    const unpriced = [];
+    const walk = (node, path) => {
+      for (const [key, val] of Object.entries(node)) {
+        if (key.startsWith('$') || key === 'asOf' || key === 'currency') continue;
+        const here = path === '' ? key : `${path}.${key}`;
+        if (val !== null && typeof val === 'object') walk(val, here);
+        else if (val === null) unpriced.push(here);
+      }
+    };
+    walk(rates, '');
+    if (unpriced.length === 0) {
+      return { done: true, detail: `packages/core/src/rates.json fully priced, read ${rates.asOf}.` };
+    }
+    return {
+      done: false,
+      detail:
+        `packages/core/src/rates.json — ${unpriced.length} still null (${unpriced.join(', ')}). ` +
+        'Any null fails the margin gate by design; see rates-sources.md.',
+    };
+  } catch (error) {
+    return { done: false, detail: `packages/core/src/rates.json could not be read: ${error.message}` };
+  }
+}
+
+function checkLegalDocuments() {
+  const pages = [
+    ['terms', 'apps/web/src/app/terms/page.tsx'],
+    ['privacy notice', 'apps/web/src/app/privacy/page.tsx'],
+  ];
+  const missing = pages.filter(([, path]) => !existsSync(repoFile(path))).map(([name]) => name);
+  return missing.length === 0
+    ? { done: true, detail: 'terms and privacy notice both render (findings 3 and 4).' }
+    : { done: false, detail: `No document exists for: ${missing.join(', ')}. Required before taking money.` };
+}
+
+function checkBrand() {
+  try {
+    const source = readFileSync(repoFile('packages/core/src/brand.ts'), 'utf8');
+    const held = BRAND_PLACEHOLDERS.filter((placeholder) => source.includes(`'${placeholder}'`));
+    return held.length === 0
+      ? { done: true, detail: 'packages/core/src/brand.ts names a real entity and inbox.' }
+      : {
+          done: false,
+          detail: `packages/core/src/brand.ts still holds placeholders: ${held.join(', ')}. Both legal documents render them.`,
+        };
+  } catch (error) {
+    return { done: false, detail: `packages/core/src/brand.ts could not be read: ${error.message}` };
+  }
+}
+
+function checkHyperdrive() {
+  try {
+    const config = readFileSync(repoFile('apps/web/wrangler.jsonc'), 'utf8');
+    // Comment-stripped rather than JSON-parsed: wrangler.jsonc carries comments by design.
+    const active = config.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+    return /"hyperdrive"\s*:/.test(active)
+      ? { done: true, detail: 'apps/web/wrangler.jsonc declares a hyperdrive binding.' }
+      : {
+          done: false,
+          detail: 'apps/web/wrangler.jsonc declares no hyperdrive binding. Workers reach Postgres through it; needs the Workers Paid plan.',
+        };
+  } catch (error) {
+    return { done: false, detail: `apps/web/wrangler.jsonc could not be read: ${error.message}` };
+  }
+}
+
 const MANUAL = [
-  ['Vendor rates', 'packages/core/src/rates.json — all null fails the margin gate by design.'],
-  ['Plan prices', '`plans.price_cents` and `plans.stripe_price_id`. A plan with no price id cannot be sold.'],
-  ['Terms + privacy notice', 'No document exists. Required before taking money (findings 3 and 4).'],
-  ['Legal entity + support inbox', 'packages/core/src/brand.ts still holds placeholders.'],
-  ['Hyperdrive binding', 'Workers reach Postgres through it. Needs the Workers Paid plan.'],
+  ['Vendor rates', checkVendorRates],
+  [
+    'Plan prices',
+    // Rows in a live database; a static check would have to guess, so it says so instead.
+    () => ({
+      done: null,
+      detail: '`plans.price_cents` and `plans.stripe_price_id`, in the deployed database. A plan with no price id returns plan_not_sellable.',
+    }),
+  ],
+  ['Terms + privacy notice', checkLegalDocuments],
+  ['Legal entity + support inbox', checkBrand],
+  ['Hyperdrive binding', checkHyperdrive],
 ];
 
 const value = (name) => {
@@ -123,8 +220,20 @@ if (value('LOOPCRAFT_DEV_IDENTITY') === '1' && process.env['NODE_ENV'] === 'prod
 }
 
 console.log('\nNot environment variables, but still required to sell');
-for (const [what, detail] of MANUAL) console.log(`  todo      ${what}\n            ${detail}`);
+let manualOutstanding = 0;
+for (const [what, check] of MANUAL) {
+  const { done, detail } = check();
+  if (done === true) {
+    console.log(`  ok        ${what}\n            ${detail}`);
+    continue;
+  }
+  manualOutstanding += 1;
+  console.log(`  ${done === null ? 'check' : 'todo '}     ${what}\n            ${detail}`);
+}
 
 console.log('\n' + '='.repeat(60));
-console.log(`${missingRequired} required missing · ${missingOptional} optional missing\n`);
+console.log(
+  `${missingRequired} required missing · ${missingOptional} optional missing · ` +
+    `${manualOutstanding} still required to sell\n`,
+);
 process.exit(missingRequired > 0 ? 1 : 0);

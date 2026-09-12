@@ -1,3 +1,4 @@
+import type { PresenceReport } from '@loopcraft/scoring';
 import type { FramingVerdict } from './framing-analysis.js';
 
 /**
@@ -104,11 +105,62 @@ export function summarizePresence(samples: readonly PresenceSample[]): PresenceS
   return { ...summary, notes: notesFor(summary) };
 }
 
-type SummaryFacts = Omit<PresenceSummary, 'notes'>;
+export type SummaryFacts = Omit<PresenceSummary, 'notes'>;
 
 /**
- * Advice, strictly about camera geometry. Every string here describes the CAMERA or a
- * position, never the person -- "you were off-centre" is framing, "you seemed distracted"
+ * Combines the per-round rows stored by POST /api/sessions/:id/presence into one report for
+ * the session, and re-derives the notes from the combined numbers.
+ *
+ * The ratios are re-weighted by the counts they were computed from, not averaged: a round
+ * with 400 samples and a round with 12 do not describe the session equally, and averaging
+ * their ratios would let a short round swing the whole report. `driftEvents` sums because
+ * losing framing four times in each of two rounds is eight times across the session, while
+ * `longestWellFramedMs` takes the maximum, because it describes a single unbroken stretch and
+ * stretches in different rounds cannot be added into one.
+ *
+ * Returns null for no rounds, so "not measured" stays distinguishable from "measured badly".
+ */
+export function combinePresence(rounds: readonly SummaryFacts[]): PresenceReport | null {
+  if (rounds.length === 0) return null;
+
+  const sampleCount = rounds.reduce((sum, r) => sum + r.sampleCount, 0);
+  const detectedCount = rounds.reduce((sum, r) => sum + r.detectedCount, 0);
+
+  // wellFramedRatio is a fraction of ALL samples; the other three are fractions of DETECTED
+  // samples. Each is re-weighted by its own denominator, or the weighting would be wrong for
+  // a round where the camera saw nothing.
+  const byTotal = (pick: (r: SummaryFacts) => number): number =>
+    sampleCount === 0
+      ? 0
+      : round2(rounds.reduce((sum, r) => sum + pick(r) * r.sampleCount, 0) / sampleCount);
+  const byDetected = (pick: (r: SummaryFacts) => number): number =>
+    detectedCount === 0
+      ? 0
+      : round2(rounds.reduce((sum, r) => sum + pick(r) * r.detectedCount, 0) / detectedCount);
+
+  const combined: SummaryFacts = {
+    sampleCount,
+    detectedCount,
+    wellFramedRatio: byTotal((r) => r.wellFramedRatio),
+    offCenterRatio: byDetected((r) => r.offCenterRatio),
+    distanceOffRatio: byDetected((r) => r.distanceOffRatio),
+    eyeLineOffRatio: byDetected((r) => r.eyeLineOffRatio),
+    driftEvents: rounds.reduce((sum, r) => sum + r.driftEvents, 0),
+    longestWellFramedMs: Math.max(...rounds.map((r) => r.longestWellFramedMs)),
+  };
+
+  return { ...combined, roundCount: rounds.length, notes: notesFor(combined) };
+}
+
+function round2(value: number): number {
+  return Math.round(value * 100) / 100;
+}
+
+/**
+ * Advice, strictly about camera geometry. Worded without naming "the round", because
+ * `combinePresence` re-derives these over a whole session as well: a note that said "for most
+ * of the round" appeared in a debrief summarising two of them. Every string here describes
+ * the CAMERA or a position, never the person -- "you were off-centre" is framing, "you seemed distracted"
  * would be an inference this product does not make and its lint rule would reject.
  */
 function notesFor(s: SummaryFacts): string[] {
@@ -117,15 +169,15 @@ function notesFor(s: SummaryFacts): string[] {
   const notes: string[] = [];
   const detectionRatio = ratio(s.detectedCount, s.sampleCount);
   if (detectionRatio < 0.5) {
-    notes.push('You were out of frame for much of the round. Check the camera can see you.');
+    notes.push('You were out of frame much of the time. Check the camera can see you.');
     return notes;
   }
 
   if (s.wellFramedRatio >= WELL_FRAMED_TARGET) {
-    notes.push('Your framing held steady for most of the round.');
+    notes.push('Your framing held steady most of the time.');
   }
   if (s.offCenterRatio >= RECURRING_ISSUE_THRESHOLD) {
-    notes.push('You sat left or right of centre for a good part of the round.');
+    notes.push('You sat left or right of centre a good part of the time.');
   }
   if (s.distanceOffRatio >= RECURRING_ISSUE_THRESHOLD) {
     notes.push('Your distance from the camera drifted outside a comfortable range.');

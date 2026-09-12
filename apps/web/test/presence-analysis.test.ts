@@ -2,8 +2,10 @@ import { describe, expect, it } from 'vitest';
 import { findBannedTokensInText } from '@loopcraft/core';
 import {
   MIN_SAMPLES_FOR_NOTES,
+  combinePresence,
   summarizePresence,
   type PresenceSample,
+  type SummaryFacts,
 } from '../src/lib/presence-analysis.js';
 import type { FramingVerdict } from '../src/lib/framing-analysis.js';
 
@@ -34,7 +36,7 @@ describe('summarizePresence', () => {
     expect(s.driftEvents).toBe(0);
     // 20 samples at 500ms: the run spans from t=0 to t=9500.
     expect(s.longestWellFramedMs).toBe(9_500);
-    expect(s.notes).toContain('Your framing held steady for most of the round.');
+    expect(s.notes).toContain('Your framing held steady most of the time.');
   });
 
   it('computes issue ratios against DETECTED samples, not all samples', () => {
@@ -131,5 +133,93 @@ describe('guardrail 1: presence advice describes the camera, never the person', 
         expect(findBannedTokensInText(note)).toEqual([]);
       }
     }
+  });
+});
+
+/**
+ * The per-round rows were written by the presence route and never read back until the debrief
+ * learned to show them. These cover the combining step that produces the session-level report.
+ */
+describe('combinePresence (per-round rows -> one session report)', () => {
+  function facts(overrides: Partial<SummaryFacts> = {}): SummaryFacts {
+    return {
+      sampleCount: 100,
+      detectedCount: 100,
+      wellFramedRatio: 0.9,
+      offCenterRatio: 0,
+      distanceOffRatio: 0,
+      eyeLineOffRatio: 0,
+      driftEvents: 0,
+      longestWellFramedMs: 10_000,
+      ...overrides,
+    };
+  }
+
+  it('reports nothing measured as null, not as an empty report', () => {
+    expect(combinePresence([])).toBeNull();
+  });
+
+  it('weights a ratio by the samples it came from, so a short round cannot swing it', () => {
+    const report = combinePresence([
+      facts({ sampleCount: 1_000, detectedCount: 1_000, wellFramedRatio: 0.9 }),
+      facts({ sampleCount: 10, detectedCount: 10, wellFramedRatio: 0 }),
+    ]);
+    // A plain mean would report 0.45. The long round is 99% of the evidence.
+    expect(report?.wellFramedRatio).toBeCloseTo(0.89, 2);
+  });
+
+  it('weights the detected-only ratios by detected samples, not total samples', () => {
+    const report = combinePresence([
+      // A round where the camera saw almost nothing must not carry its off-centre ratio as
+      // though it had been measured over all 500 frames.
+      facts({ sampleCount: 500, detectedCount: 5, offCenterRatio: 1 }),
+      facts({ sampleCount: 100, detectedCount: 100, offCenterRatio: 0 }),
+    ]);
+    expect(report?.offCenterRatio).toBeCloseTo(0.05, 2);
+  });
+
+  it('sums drift events across rounds and keeps the longest single stretch', () => {
+    const report = combinePresence([
+      facts({ driftEvents: 4, longestWellFramedMs: 12_000 }),
+      facts({ driftEvents: 3, longestWellFramedMs: 31_000 }),
+    ]);
+    expect(report?.driftEvents).toBe(7);
+    expect(report?.longestWellFramedMs).toBe(31_000);
+    expect(report?.roundCount).toBe(2);
+  });
+
+  it('re-derives the notes from the combined numbers, not from any one round', () => {
+    const steady = combinePresence([facts({ wellFramedRatio: 0.95 })]);
+    expect(steady?.notes.join(' ')).toContain('held steady');
+
+    const drifting = combinePresence([
+      facts({ wellFramedRatio: 0.3, offCenterRatio: 0.6, driftEvents: 6 }),
+    ]);
+    expect(drifting?.notes.join(' ')).toContain('left or right of centre');
+    expect(drifting?.notes.join(' ')).toContain('6 times');
+  });
+
+  it('stays silent when the combined sample count is too thin to interpret', () => {
+    const report = combinePresence([
+      facts({ sampleCount: 3, detectedCount: 3, wellFramedRatio: 0.1 }),
+    ]);
+    expect(report?.notes).toEqual([]);
+    expect(report?.sampleCount).toBe(3);
+  });
+
+  it('survives a round where the camera never found a face', () => {
+    const report = combinePresence([facts({ sampleCount: 60, detectedCount: 0, wellFramedRatio: 0 })]);
+    expect(report?.detectedCount).toBe(0);
+    expect(report?.offCenterRatio).toBe(0);
+    expect(report?.notes.join(' ')).toContain('out of frame');
+  });
+
+  it('says nothing about the person, only the camera and the position in frame', () => {
+    const report = combinePresence([
+      facts({ sampleCount: 200, detectedCount: 200, wellFramedRatio: 0.2, offCenterRatio: 0.5,
+              distanceOffRatio: 0.5, eyeLineOffRatio: 0.5, driftEvents: 9 }),
+    ]);
+    expect(report?.notes.length).toBeGreaterThan(0);
+    expect(findBannedTokensInText(report!.notes.join(' '))).toEqual([]);
   });
 });

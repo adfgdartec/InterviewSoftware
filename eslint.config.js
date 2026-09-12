@@ -36,6 +36,24 @@ export default tseslint.config(
     rules: { '@typescript-eslint/no-require-imports': 'off' },
   },
   {
+    // Repo tooling that runs on Node directly, not through a bundler: scripts/preflight.mjs
+    // and any build config beside it. `eslint .` from the root lints these -- which is what
+    // CI's lint step runs -- and without Node's globals declared here every `console` and
+    // `process` reference in them is a no-undef error. That is exactly what was failing CI:
+    // the root `pnpm lint` used to run `turbo run lint`, which only covered two packages and
+    // never looked at scripts/ at all, so the failure was invisible locally.
+    files: ['scripts/**/*.{js,mjs,cjs}', '**/*.config.mjs'],
+    languageOptions: {
+      globals: {
+        process: 'readonly',
+        console: 'readonly',
+        URL: 'readonly',
+        Buffer: 'readonly',
+        __dirname: 'readonly',
+      },
+    },
+  },
+  {
     // Test files legitimately quote the banned vocabulary in order to assert it is rejected.
     files: ['**/test/**', '**/*.test.ts', '**/*.test.js'],
     rules: { 'loopcraft/no-affect-inference': 'off' },
